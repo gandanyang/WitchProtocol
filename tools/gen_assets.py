@@ -32,14 +32,31 @@ JOBS = [
                  "surrounded by a huge glowing star magic circle and floating star fragments, starry night sky "
                  "with a distant rift, dark fantasy, gothic, magical girl, anime cinematic, glowing magic circle, "
                  "beautiful girl, high quality illustration, game character design, full body portrait")),
-    # ---- S 级：黎歌战斗 sprite（俯视背部视角——STG 自机标准，参考《爆裂魔女》；白底供 prep_sprite 去底）----
+    # ---- S 级：黎歌战斗 sprite v2（方向正确版：头朝上/裙子朝后飘/星翼；用户拍板方向）----
+    # 俯视背部视角，角色头在画面上方（飞向屏幕上方）、裙摆向身后（画面下方）飘动，
+    # 加一对与主色调（紫/银）搭配的半透明星紫水晶翅膀。
+    dict(name="rika_battlesprite2", w=1024, h=1024, dir="characters/rika/battlesprite",
+         prompt=("anime game sprite of a small magical girl viewed from behind and slightly above, flying upward, "
+                 "her head at the top of the frame pointing up toward the sky, only the back of her head and "
+                 "shoulders visible, no face, long silver-purple hair flowing downward behind her, "
+                 "a pair of translucent violet crystal wings spread open on her back, "
+                 "black gothic witch dress with faint silver star patterns, the skirt trailing behind and "
+                 "flowing downward away from her, arms slightly spread, "
+                 "a few tiny glowing star fragments drifting nearby, "
+                 "the character centered in the frame occupying about half the image height, "
+                 "plain solid white background, clean flat anime style, soft even lighting, "
+                 "small STG bullet hell player ship character sprite, top-down view")),
+    # ---- S 级：黎歌战斗 sprite（俯视背部视角——STG 自机标准；prompt 按 prompt-expander-photo 方法论优化：
+    #     视觉层级=背姿→长发→裙摆→星辉；可执行性=具体空间事实；自然语言段落而非关键词沙拉）----
     dict(name="rika_battlesprite", w=1024, h=1024, dir="characters/rika/battlesprite",
-         prompt=("game character top-down flying sprite, a young magical girl with long silver-purple hair seen "
-                 "from behind and slightly above, flying toward the top of the screen, her back facing the camera, "
-                 "black gothic witch dress with star patterns flowing in the wind, hair streaming upward, no face "
-                 "visible, back of head and shoulders, arms slightly extended, dynamic aerial flight pose, "
-                 "plain solid white background, clean flat anime style, clear silhouette, small player ship "
-                 "character sprite, STG bullet hell player sprite, top-down perspective, game sprite asset")),
+         prompt=("anime game sprite of a small magical girl character viewed from directly behind and slightly above, "
+                 "flying upward toward the top of the screen, her head pointing up, only the back of her head and "
+                 "shoulders visible, no face, long silver-purple hair streaming and floating upward, "
+                 "black gothic witch dress with faint silver star patterns, skirt and hem flaring around her, "
+                 "arms slightly spread for balance, a few tiny glowing star fragments drifting nearby, "
+                 "the character centered in the frame occupying about half the image height, "
+                 "plain solid white background, clean flat anime style, soft even lighting, "
+                 "small STG bullet hell player ship character sprite, top-down view")),
     # ---- S 级：玩家子弹（弹幕可读性）----
     dict(name="bullet_star", w=1024, h=1024, dir="bullets",
          prompt=("game bullet texture, a single glowing star projectile with a bright white core and violet-cyan "
@@ -145,25 +162,31 @@ def main():
     only = None
     if "--only" in sys.argv:
         only = set(sys.argv[sys.argv.index("--only") + 1].split(","))
+    # 多候选：--variants N（配合 --only 单 job）→ 输出 name_v1..name_vN（不同 seed）
+    variants = 1
+    if "--variants" in sys.argv:
+        variants = int(sys.argv[sys.argv.index("--variants") + 1])
     wf = json.load(open(WF_PATH, encoding="utf-8"))
     seed = SEED_BASE
     ok, fail = 0, 0
     for job in JOBS:
         if only and job["name"] not in only:
             continue
-        seed += 12345
-        print(f"== generating {job['name']} (seed={seed}) ...", flush=True)
-        try:
-            pid = submit(wf, job, seed)
-            img = wait_image(pid)
-            dest = os.path.join(ASSETS, job["dir"], job["name"] + ".png")
-            download(img, dest)
-            size = os.path.getsize(dest)
-            print(f"   OK -> {dest} ({size} bytes)", flush=True)
-            ok += 1
-        except Exception as e:
-            print(f"   FAIL: {e}", flush=True)
-            fail += 1
+        for v in range(variants):
+            seed += 12345
+            suffix = f"_v{v + 1}" if variants > 1 else ""
+            print(f"== generating {job['name']}{suffix} (seed={seed}) ...", flush=True)
+            try:
+                pid = submit(wf, job, seed)
+                img = wait_image(pid)
+                dest = os.path.join(ASSETS, job["dir"], job["name"] + suffix + ".png")
+                download(img, dest)
+                size = os.path.getsize(dest)
+                print(f"   OK -> {dest} ({size} bytes)", flush=True)
+                ok += 1
+            except Exception as e:
+                print(f"   FAIL: {e}", flush=True)
+                fail += 1
     print(f"done. ok={ok} fail={fail}")
 
 
