@@ -4,11 +4,11 @@
 
 [resource]
 script = ExtResource("1")
-max_hp = 60
-move_speed = 40.0
-bullet_speed = 160.0
-ring_count = 16
-ring_interval = 1.6
-spiral_count = 8
-spiral_interval = 0.5
-aimed_interval = 2.2
+MaxHp = 60
+MoveSpeed = 40.0
+BulletSpeed = 160.0
+RingCount = 16
+RingInterval = 1.6
+SpiralCount = 8
+SpiralInterval = 0.5
+AimedInterval = 2.2

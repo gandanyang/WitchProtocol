@@ -69,6 +69,13 @@ public static partial class FeedbackSystem
         _zoomT = _zoomDur;
     }
 
+    /// 复位镜头缩放（BUG-009）：演出结束后立即回到 Zoom=1，避免重开战场持续放大。
+    public static void ResetZoom()
+    {
+        _zoomT = 0f;
+        if (_camera != null) _camera.Zoom = Vector2.One;
+    }
+
     public static Camera2D? Camera => _camera;
 
     /// 每帧驱动：震屏衰减 / HitStop 恢复 / Zoom 动画。挂 GameManager 下。

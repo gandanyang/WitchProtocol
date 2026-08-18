@@ -101,6 +101,14 @@ public partial class DeathSequence : CanvasLayer
     private void Finish()
     {
         if (_curtain != null) _curtain.Visible = false; // 黑幕撤下，露出结算层
+        // 状态复位（BUG-009/010/012）：镜头缩放、TimeScale、自机位置/姿态
+        FeedbackSystem.ResetZoom();
+        Engine.TimeScale = 1f;
+        if (_player != null)
+        {
+            _player.Position = Autoload.GameManager.I!.PlayfieldSize / 2f + new Vector2(0, 120); // 出生点（与 Main.SetupStage 一致）
+            _player.RestoreForStage(); // 复位 Rotation/IsDying/受击态（回血由重开时 Main 再调，幂等）
+        }
         // 全屏战败 CG + DEFEATED 结算 + 菜单（继续 / 回到主菜单）；CG 加载失败则纯文字兜底
         var cg = ResourceLoader.Load<Texture2D>(DefeatCgPath);
         _settlement?.ShowDefeat(cg ?? CreateFallbackCg(), _score, _kills, _timeSec, _player?.WeaponLevel ?? 1, _onRetry!, _onMenu!);

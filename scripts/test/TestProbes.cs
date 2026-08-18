@@ -34,6 +34,9 @@ public static class TestProbes
         hub.RegisterProbe("sfx", ProbeSfx);
         hub.RegisterProbe("feedback", ProbeFeedback);
         hub.RegisterProbe("deathfall", ProbeDeathFall);
+        // Bug 收口（2026-08-19 三轮）：孤儿弹池兜底 / 敌人接触伤害
+        hub.RegisterProbe("m1_orphan", ProbeM1OrphanBullet);
+        hub.RegisterProbe("m1_enemy_contact", ProbeM1EnemyContact);
     }
 
     /// 启动自检：四个 autoload 单例均已就位，且拿到有效视口。
@@ -122,7 +125,9 @@ public static class TestProbes
     {
         var res = ResourceLoader.Load("res://data/EnemyConfig.tres", "", ResourceLoader.CacheMode.Ignore);
         if (res is not Data.EnemyConfig cfg) return false;
+        // 哨兵区分度（BUG-005/011 教训）：配置文件值必须 ≠ 代码默认值，否则 .tres 未反序列化也会空转通过
         if (cfg.MaxHp <= 0 || cfg.ShootInterval <= 0f || cfg.BulletSpeed <= 0f) return false;
+        if (cfg.MaxHp == 3) return false; // 默认 3 = 文件未生效
 
         var holder = new Node { Name = "ProbeEnemyHolder" };
         DevTestHub.I.AddChild(holder);
@@ -151,6 +156,7 @@ public static class TestProbes
         var res = ResourceLoader.Load("res://data/BossConfig.tres", "", ResourceLoader.CacheMode.Ignore);
         if (res is not Data.BossConfig cfg) return false;
         if (cfg.MaxHp <= 0 || cfg.BulletSpeed <= 0f || cfg.RingCount <= 0) return false;
+        if (cfg.MaxHp == 50) return false; // 哨兵（BUG-011）：默认 50 = .tres 未反序列化（snake_case 失效）
 
         var holder = new Node { Name = "ProbeBossHolder" };
         DevTestHub.I.AddChild(holder);
@@ -308,6 +314,50 @@ public static class TestProbes
         float y0 = pc.Position.Y;
         for (int i = 0; i < 30; i++) pc.ApplyDeathFall(0.1f); // 模拟 3 秒坠落
         bool ok = pc.Position.Y > y0 + 20f; // 垂直下坠明显
+        holder.QueueFree();
+        return ok;
+    }
+
+    /// m1_orphan：孤儿弹兜底（BUG-008）——池释放后 Recycle 目标无效，RecycleSelf 走自毁而非抛异常。
+    private static bool ProbeM1OrphanBullet()
+    {
+        var holder = new Node { Name = "ProbeOrphanHolder" };
+        DevTestHub.I.AddChild(holder);
+
+        var pool = new BulletPool(8);
+        holder.AddChild(pool);
+        var b = pool.Spawn();
+        var world = new Node2D { Name = "OrphanWorld" };
+        holder.AddChild(world);
+        b.GetParent()?.RemoveChild(b); // 先摘除（Godot AddChild 不自动 reparent）
+        world.AddChild(b); // 子弹 reparent 到世界层（脱离 pool 子树，模拟 P0-1 场景）
+        b.Recycle = pool.Release;
+
+        holder.RemoveChild(pool);
+        pool.Free(); // 池释放；子弹仍在 world 下存活（孤儿）
+
+        bool ok;
+        try
+        {
+            b.RecycleSelf(); // 应走 QueueFree 兜底，不抛"访问已释放实例"
+            ok = true;
+        }
+        catch
+        {
+            ok = false;
+        }
+        holder.QueueFree();
+        return ok;
+    }
+
+    /// m1_enemy_contact：敌人接触伤害（BUG-012）——Enemy 的 CollisionMask 含玩家层（BodyEntered 可触发）。
+    private static bool ProbeM1EnemyContact()
+    {
+        var holder = new Node { Name = "ProbeEnemyContactHolder" };
+        DevTestHub.I.AddChild(holder);
+        var enemy = new Enemy.Enemy();
+        holder.AddChild(enemy); // _Ready → 设置 mask
+        bool ok = (enemy.CollisionMask & Bullet.CollisionLayers.Player) != 0;
         holder.QueueFree();
         return ok;
     }

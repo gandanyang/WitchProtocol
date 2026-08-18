@@ -101,6 +101,17 @@ public partial class Bullet : Area2D
     public override void _PhysicsProcess(double delta)
     {
         Position += Velocity * (float)delta;
+
+        // BUG-008 兜底：原池已释放（Recycle 目标无效）的孤儿弹 → 出屏自毁，
+        // 防止幽灵弹无限飞行（池的 _Process 已随池销毁，无人回收它们）。
+        if (Recycle != null && !GodotObject.IsInstanceValid(Recycle.Target as GodotObject))
+        {
+            var size = Autoload.GameManager.I?.PlayfieldSize ?? new Vector2(1280, 720);
+            const float margin = 60f;
+            var p = Position;
+            if (p.X < -margin || p.X > size.X + margin || p.Y < -margin || p.Y > size.Y + margin)
+                QueueFree();
+        }
     }
 
     private void OnAreaEntered(Area2D other)
@@ -130,5 +141,13 @@ public partial class Bullet : Area2D
         }
     }
 
-    private void RecycleSelf() => Recycle?.Invoke(this);
+    /// 命中回收（探针可调用）：回收前校验池仍有效（BUG-008——Enemy/Boss 阵亡后池已释放，
+    /// 在飞孤儿弹的 Recycle 指向无效实例；无效则自毁，避免「访问已释放实例」异常）。
+    public void RecycleSelf()
+    {
+        if (Recycle != null && GodotObject.IsInstanceValid(Recycle.Target as GodotObject))
+            Recycle(this);
+        else
+            QueueFree();
+    }
 }

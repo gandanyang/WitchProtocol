@@ -42,7 +42,9 @@ public partial class Enemy : Area2D
         }
 
         CollisionLayer = CollisionLayers.Enemy; // 供玩家弹 area_entered 检测
-        CollisionMask = 0;  // 自身不主动检测（受击由玩家弹脚本处理）
+        // BUG-012（接触伤害落地）：mask 含玩家层 + BodyEntered——小怪撞到玩家扣血并消失（防贴脸无反馈）
+        CollisionMask = CollisionLayers.Player;
+        BodyEntered += OnBodyEntered;
         AddChild(new CollisionShape2D { Shape = new CircleShape2D { Radius = RadiusPx } });
         AddChild(_emitter);
 
@@ -62,6 +64,16 @@ public partial class Enemy : Area2D
     }
 
     public void SetTarget(Node2D? target) => _target = target;
+
+    /// BUG-012（接触伤害）：撞到玩家 → 玩家受击 + 自身消失（防贴脸持续无反馈）。
+    private void OnBodyEntered(Node2D body)
+    {
+        if (body is Player.PlayerController pc && pc.IsVulnerable())
+        {
+            Autoload.EventBus.I.Dispatch("player_hit");
+            QueueFree();
+        }
+    }
 
     /// 被玩家弹命中（由玩家弹脚本调用）。归零则阵亡并通知结算（payload=自身，携带 KillScore）。
     public void TakeDamage(int damage)
