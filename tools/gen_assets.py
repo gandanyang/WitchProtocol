@@ -219,6 +219,50 @@ JOBS = [
          prompt=("game effect texture of two curved glowing star trails orbiting in an ellipse, violet and silver "
                  "light ribbons with tiny star sparkles along them, centered, plain solid black background, "
                  "clean flat anime style, game special effect asset, no text")),
+    # ---- S 级：M2 敌人四类俯视精灵（与黎歌同一视觉语言：星紫调暗黑幻想、俯视背部、白底、清晰剪影）----
+    dict(name="enemy_chaser", w=1024, h=1024, dir="enemies",
+         prompt=("anime game sprite of a small dark violet bat-like flying monster viewed from behind and slightly "
+                 "above, flying upward, sleek streamlined body with sharp angular wing membranes, two tiny glowing "
+                 "violet eyes on the back of its head, a few small star sparkles trailing behind it, "
+                 "the monster centered occupying about half the image height, plain solid white background, "
+                 "clean flat anime style, soft even lighting, small STG enemy chaser sprite, top-down view, "
+                 "no text, no watermark")),
+    dict(name="enemy_bomber", w=1024, h=1024, dir="enemies",
+         prompt=("anime game sprite of a round heavy flying bomb monster viewed from behind and slightly above, "
+                 "flying upward slowly, a plump dark violet orb body with a glowing bright violet core visible "
+                 "through cracks in its shell, small stubby wings on the sides, tiny silver rivets like star studs, "
+                 "the monster centered occupying about half the image height, plain solid white background, "
+                 "clean flat anime style, soft even lighting, small STG enemy bomber sprite, top-down view, "
+                 "no text, no watermark")),
+    dict(name="enemy_sniper", w=1024, h=1024, dir="enemies",
+         prompt=("anime game sprite of a tall slender magical sniper monster viewed from behind and slightly above, "
+                 "flying upward, a thin dark violet robed figure holding a long staff topped with a charging "
+                 "glowing violet orb, a small crescent ornament on its hood, elegant and menacing, "
+                 "the monster centered occupying about half the image height, plain solid white background, "
+                 "clean flat anime style, soft even lighting, small STG enemy sniper sprite, top-down view, "
+                 "no text, no watermark")),
+    dict(name="enemy_sprayer", w=1024, h=1024, dir="enemies",
+         prompt=("anime game sprite of a spiky radiant crystal flower monster viewed from behind and slightly above, "
+                 "flying upward, a dark violet core surrounded by many radiating sharp crystal petals like a star "
+                 "bloom, tiny glowing silver dots along the petal edges, the monster centered occupying about half "
+                 "the image height, plain solid white background, clean flat anime style, soft even lighting, "
+                 "small STG enemy sprayer sprite, top-down view, no text, no watermark")),
+    # ---- S 级：敌弹视觉优化（星紫调弹幕语言：普通/威胁/光束三类，黑底发光特效）----
+    dict(name="enemy_bullet_orb", w=1024, h=1024, dir="bullets",
+         prompt=("game bullet texture of a small glowing violet star-dust orb projectile, a soft round violet orb "
+                 "with tiny star sparkle specks inside and a faint glow halo, small and readable, centered, "
+                 "plain solid black background, clean flat anime style, high visibility, game enemy bullet asset, "
+                 "no text")),
+    dict(name="enemy_bullet_warn", w=1024, h=1024, dir="bullets",
+         prompt=("game bullet texture of a dangerous warning projectile, a bright white-hot core with vivid "
+                 "magenta and violet glow spikes radiating outward, high contrast against dark background, "
+                 "clearly reads as a threat bullet, centered, plain solid black background, clean flat anime style, "
+                 "high visibility, game enemy warning bullet asset, no text")),
+    dict(name="enemy_bullet_laser", w=1024, h=1024, dir="bullets",
+         prompt=("game bullet texture of a vertical glowing violet laser beam projectile, a straight bright core "
+                 "with softer glow edges and tiny sparkle particles along it, oriented vertically, centered, "
+                 "plain solid black background, clean flat anime style, high visibility, game enemy laser asset, "
+                 "no text")),
     # ---- S 级下一批：受击/击杀反馈特效 + 升级 UI + 魔法阵（黑底便于去底）----
     dict(name="hit_flash", w=1024, h=1024, dir="effects",
          prompt=("game visual effect sprite, a soft white-violet radial flash burst, expanding star sparks and "
