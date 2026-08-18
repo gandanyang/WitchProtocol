@@ -12,10 +12,10 @@ config_version=5
 
 config/name="Witch Protocol · 魔女协议"
 config/description="魔女协议 — 二次元弹幕 RPG（记忆被剥夺时，还剩什么）"
-run/main_scene="res://scenes/Main.tscn"
+run/main_scene="res://scenes/TitleScene.tscn"
 config/use_custom_user_dir=true
 config/custom_user_dir_name="magicThunder"
-config/features=PackedStringArray("4.7", "C#", "Forward Plus")
+config/features=PackedStringArray("4.7", "C#", "GL Compatibility")
 config/icon="res://icon.svg"
 
 [autoload]
@@ -36,6 +36,8 @@ window/stretch/aspect="expand"
 
 [rendering]
 
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
 environment/defaults/default_clear_color=Color(0.015, 0.02, 0.05, 1)
 
 [dotnet]

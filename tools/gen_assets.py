@@ -13,7 +13,7 @@ import urllib.request
 BASE = "http://127.0.0.1:8188"
 CLIENT = "wp-assets"
 WF_PATH = "G:/BattleGame/workflow/anima_turboV10.json"
-ASSETS = "G:/WitchProtocol/assets"
+ASSETS = "G:/magicThunder/assets"
 SEED_BASE = 20260819
 
 # 视觉基准（设计规范 v0.1 §18）：暗黑幻想 x 魔法少女；黑底素材供 remove_dark shader 去底
@@ -59,6 +59,14 @@ JOBS = [
                  "calm closed eyes, floating above a giant glowing star magic circle, surrounded by star shards and "
                  "a dark rift in the sky, dark fantasy, gothic, magical girl villain, anime cinematic, high quality "
                  "illustration, game boss character design, full body portrait")),
+    # ---- S 级：战败 CG（全屏结算背景，用户红线"战败 CG 一定要有"）----
+    dict(name="defeat_cg", w=1216, h=832, dir="backgrounds",
+         prompt=("dark fantasy defeat scene, a young magical girl with long silver-purple hair falling helplessly "
+                 "through a ruined sky at night, her black gothic dress tattered, a huge glowing rift splitting the "
+                 "sky above, a distant majestic witch queen silhouette hovering in the rift light, floating star "
+                 "fragments and magic circle remnants fading, cinematic wide shot, melancholic epic atmosphere, "
+                 "muted violet and silver palette, anime cinematic, high quality illustration, game defeat screen "
+                 "background art, no text, no watermark")),
     # ---- S 级下一批：受击/击杀反馈特效 + 升级 UI + 魔法阵（黑底便于去底）----
     dict(name="hit_flash", w=1024, h=1024, dir="effects",
          prompt=("game visual effect sprite, a soft white-violet radial flash burst, expanding star sparks and "

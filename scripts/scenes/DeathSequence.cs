@@ -7,10 +7,11 @@ namespace MagicThunder.Scenes;
 
 /// <summary>
 /// 战败 CG 演出（MVP 的灵魂场景，用户红线"战败 CG 一定要有"）。
-/// 流程：魔女失去控制坠落（1.8s）→ 镜头拉远 + 黑幕渐入（1.2s）→ 定格静默（0.5s）→ DEFEATED 结算。
+/// 流程：魔女失去控制坠落（1.8s）→ 镜头拉远 + 黑幕渐入（1.2s）→ 定格静默（0.5s）→
+/// 全屏战败 CG（ComfyUI 素材）+ DEFEATED 结算 + 菜单（继续 / 回到主菜单）。
 ///  - ProcessMode=Always：Main.EndRun 已 GetTree().Paused=true，本层仍推进演出；
 ///  - 玩家坠落由本层逐帧驱动（ApplyDeathFall），Boss 随暂停定格"漂浮在天空"；
-///  - 黑幕（ColorRect 全屏）在演出结束时隐藏，露出 Settlement 结算层。
+///  - 黑幕（ColorRect 全屏）在演出结束时隐藏，露出 Settlement 的全屏 CG 结算层。
 /// </summary>
 public partial class DeathSequence : CanvasLayer
 {
@@ -18,6 +19,7 @@ public partial class DeathSequence : CanvasLayer
     private const float ZoomTime = 1.2f;
     private const float PauseTime = 0.5f;
     private const float FinalZoom = 1.45f;
+    private const string DefeatCgPath = "res://assets/backgrounds/defeat_cg.png";
 
     private PlayerController? _player;
     private Settlement? _settlement;
@@ -25,12 +27,14 @@ public partial class DeathSequence : CanvasLayer
     private int _kills;
     private float _timeSec;
     private System.Action? _onRetry;
+    private System.Action? _onMenu;
     private ColorRect? _curtain;
     private float _t;
     private int _phase;
 
-    /// 由 Main.EndRun(false) 创建并 AddChild。
-    public void Setup(PlayerController player, Settlement settlement, int score, int kills, float timeSec, System.Action onRetry)
+    /// 由 Main.EndRun(false) 创建并 AddChild。onRetry 继续；onMenu 回到主菜单。
+    public void Setup(PlayerController player, Settlement settlement, int score, int kills, float timeSec,
+                      System.Action onRetry, System.Action onMenu)
     {
         _player = player;
         _settlement = settlement;
@@ -38,6 +42,7 @@ public partial class DeathSequence : CanvasLayer
         _kills = kills;
         _timeSec = timeSec;
         _onRetry = onRetry;
+        _onMenu = onMenu;
     }
 
     public override void _Ready()
@@ -96,7 +101,17 @@ public partial class DeathSequence : CanvasLayer
     private void Finish()
     {
         if (_curtain != null) _curtain.Visible = false; // 黑幕撤下，露出结算层
-        _settlement?.ShowDefeat(_score, _kills, _timeSec, _player?.WeaponLevel ?? 1, _onRetry!);
+        // 全屏战败 CG + DEFEATED 结算 + 菜单（继续 / 回到主菜单）；CG 加载失败则纯文字兜底
+        var cg = ResourceLoader.Load<Texture2D>(DefeatCgPath);
+        _settlement?.ShowDefeat(cg ?? CreateFallbackCg(), _score, _kills, _timeSec, _player?.WeaponLevel ?? 1, _onRetry!, _onMenu!);
         QueueFree();
+    }
+
+    /// CG 加载失败时的纯色兜底（不会白屏）。
+    private static Texture2D CreateFallbackCg()
+    {
+        var img = Image.CreateEmpty(16, 16, false, Image.Format.Rgb8);
+        img.Fill(new Color(0.05f, 0.04f, 0.1f));
+        return ImageTexture.CreateFromImage(img);
     }
 }

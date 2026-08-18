@@ -13,6 +13,7 @@ public partial class Settlement : CanvasLayer
 {
     private Control? _root;
     private VBoxContainer? _box;
+    private TextureRect? _cg; // 全屏战败 CG（结算背景）
 
     public override void _Ready()
     {
@@ -41,6 +42,7 @@ public partial class Settlement : CanvasLayer
     public void ShowVictory(int score, int kills, (UpgradeType type, string desc)[] choices, Action<int> onPick)
     {
         _root!.Show();
+        if (_cg != null) _cg.Visible = false; // 胜利不显示战败 CG
         ClearBox();
 
         AddTitle("胜利！");
@@ -56,13 +58,29 @@ public partial class Settlement : CanvasLayer
         AddHint("点击强化，进入下一关（敌人更强，分数更高）");
     }
 
-    /// 失败结算（战败 CG 的收尾）：DEFEATED + 战斗统计 + "她还活着。" + 重新挑战。
-    /// timeSec 战斗时长（秒，格式化为 mm:ss）；weaponLevel 武器等级（当前成长表征）。
-    public void ShowDefeat(int score, int kills, float timeSec, int weaponLevel, Action onRetry)
+    /// 失败结算（战败 CG，用户红线）：全屏战败 CG 图 + DEFEATED + 统计 + 「她还活着。」+ 菜单（继续/回到主菜单）。
+    /// cg 战败图（ComfyUI 产出）；timeSec 战斗时长（mm:ss）；weaponLevel 武器等级。
+    /// onRetry 继续（重开本关保留强化）；onMenu 回到主菜单。
+    public void ShowDefeat(Texture2D cg, int score, int kills, float timeSec, int weaponLevel, Action onRetry, Action onMenu)
     {
         _root!.Show();
-        ClearBox();
 
+        // 全屏战败 CG（KeepAspectCovered，占满整个屏幕）
+        if (_cg == null)
+        {
+            _cg = new TextureRect
+            {
+                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
+            };
+            _cg.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+            _root.AddChild(_cg);
+            _cg.MoveToFront(); // CG 垫底在文字下、暗化之上
+        }
+        _cg.Texture = cg;
+        _cg.Visible = true;
+
+        ClearBox();
         AddTitle("DEFEATED");
         int min = (int)(timeSec / 60f);
         int sec = (int)(timeSec % 60f);
@@ -75,7 +93,8 @@ public partial class Settlement : CanvasLayer
         epilogue.Modulate = new Color(1f, 0.85f, 0.6f);
         _box!.AddChild(epilogue);
         AddSpacer();
-        AddButton("再次挑战（保留已强化）", () => onRetry());
+        AddButton("继续", () => onRetry());
+        AddButton("回到主菜单", () => onMenu());
     }
 
     private void ClearBox()

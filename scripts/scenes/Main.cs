@@ -195,10 +195,12 @@ public partial class Main : Node
         }
         else
         {
-            // 战败 CG（灵魂）：死亡演出（坠落→拉远→黑幕）→ 演出结束由 DeathSequence 调结算
+            // 战败 CG（灵魂）：死亡演出（坠落→拉远→黑幕）→ 全屏 CG + DEFEATED 菜单（继续/回主菜单）
             _pendingChoices = null;
             var death = new DeathSequence { Name = "DeathSequence" };
-            death.Setup(_player!, _settlement!, _score, _kills, _runTime, SetupStage);
+            death.Setup(_player!, _settlement!, _score, _kills, _runTime,
+                SetupStage, // 继续：重开本关（保留强化）
+                () => GetTree().ChangeSceneToFile("res://scenes/TitleScene.tscn")); // 回到主菜单
             AddChild(death);
         }
     }

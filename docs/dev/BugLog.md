@@ -15,6 +15,9 @@
 > ✅ **M1 合流复核（2026-08-19 02:2x）**：15/15 探针全绿（地基 9 + M1 新增 6），退出无 RID 泄漏；BUG-001/002/004/005 已修复（见各条状态），BUG-003/006/007 仍待排期。
 >
 > ✅ **全量修复复核（2026-08-19 02:3x，TRAE）**：BUG-001~007 全部收口（见各条状态）。补充 BUG-001 遗漏——**Boss.cs 发射器此前未注入世界层**（只修了 Enemy），已同步注入 `EnemyBullets`，Boss 漂移不再带动弹幕。验证：build 0 错误 0 警告 + headless 15/15 PASS。
+>
+> ⚠️ **二轮走查快照（2026-08-19 02:5x 起，本次会话）**：工作树此时含 `e70e5f7`（M1 合流）+ 在途改动（音频 SfxPlayer/gen_sfx.py、FeedbackSystem、DeathSequence、CollisionLayers、remove_white shader 等），且**仍在被并行 Agent 实时编辑**——下方 BUG-008~012 基于该快照，**行号/代码可能已随在途编辑漂移，合流后需复核**。
+> 二轮实测：`dotnet build` **0 错误 0 警告**；`tools/run_tests.ps1` **18/18 全绿**；退出**无 RID 泄漏**（BUG-002 复验通过）。配置侧：`EnemyConfig.tres` / `PlayerConfig.tres` 已是 PascalCase（BUG-005 修复生效），但 **`BossConfig.tres` 仍是 snake_case**（见 BUG-011）。
 
 ## 二、缺陷清单
 
@@ -68,6 +71,43 @@
 1. `EventBus.Dispatch` 加 `MaxLogEntries=256`，淘汰最旧，日志有界；
 2. `Main.SetupStage` 重开一关前清空 `EnemyBullets` 世界层下的孤儿敌弹（上一关发射器已随 Enemy/Boss QueueFree 销毁，孤儿弹直接销毁不回池），结算/重开不再有空中敌弹残留；
 3. 场景装配风格：当前统一"空 .tscn + 代码装配"，属制作人已拍板的实现决策，与文档表述偏差已在文档侧留意，非代码缺陷。
+
+### BUG-008 · 小怪阵亡后"孤儿弹" Recycle 指向已释放池（高 · 真实缺陷，P0-1 修复的边角）
+- **位置**：`scripts/bullet/BulletEmitter.cs:44-51`（reparent 到世界层）与 `scripts/enemy/Enemy.cs:74`（`QueueFree`）的交互
+- **现象**：小怪被击杀 → `Enemy.QueueFree()` 连同其发射器/`BulletPool` 一起销毁；但**已 reparent 到 `EnemyBullets` 世界层的在飞敌弹存活**，其 `Recycle = Pool.Release` 仍指向**已释放的池**。若该子弹命中玩家（`OnBodyEntered → RecycleSelf`）或命中后回收，会对已释放 GodotObject 调用方法 → Godot C# 抛「访问已释放实例」错误。
+- **影响**：多怪波的常态路径（4/6/8 只逐只阵亡）极易触发；即使不命中，由于原池的 `_Process` 已随池销毁，**出屏回收永远不会执行——波次内幽灵弹不回收**，只在 `Main.SetupStage`（重开关卡）才全清。当前 `m1_enemybullet_world` 探针只验证"子弹进了世界层"，未覆盖此边角。
+- **建议修法**：a) 子弹命中/回收前判 `IsInstanceValid(Recycle 目标)` 或让 Enemy/Boss 阵亡时把世界层内自己派发的子弹一并销毁；b) 或池被释放前把在飞子弹的 `Recycle` 解绑；c) 至少补一条探针：击杀敌人后推进若干帧，断言世界层无该池子弹残留且不报错。
+- **状态**：登记待复核（快照 2026-08-19 二轮；可能已被随后在途编辑处理）。
+
+### BUG-009 · 战败演出后相机 Zoom 未复位（中 · 视觉/UX）
+- **位置**：`scripts/effects/FeedbackSystem.cs`（`ZoomTo` 只设动画，不提供复位）与 `scripts/scenes/DeathSequence.cs:70`（拉远到 1.45）
+- **现象**：战败演出 `ZoomTo(1.45)` 结束后，`Camera2D` 的 Zoom 停留在 1.45；`Main.SetupStage`/任何处都没有复位到 1.0。
+- **影响**：玩家战败过一次后，重开关卡战场持续放大显示（非预期取景），直到下次再触发 ZoomTo/重启进程。
+- **建议修法**：`SetupStage`（或 `RestoreForStage`）前调用新增的 `FeedbackSystem.ResetZoom()`（把 Zoom 置回 One 并清 `_zoomT`）。
+- **状态**：登记待复核。
+
+### BUG-010 · 战败重开后自机 Position / Rotation / IsDying 未复位（中 · 视觉/状态残留）
+- **位置**：`scripts/player/PlayerController.cs` `RestoreForStage()`（只回血/清无敌）与 `ApplyDeathFall()`（坠落改 `Position`/`Rotation`）`DeathSequence` 驱动
+- **现象**：战败演出把自机位置推离（下坠）并持续 `Rotation += 0.9*dt`；`RestoreForStage` 不重置 `Position`/`Rotation`/`IsDying`。重开后：
+  - 自机在坠落残余位置重生（会被边界钳制到**屏幕最底边**，而非出生点 `center+(0,120)`）；
+  - sprite 残留明显旋转角；
+  - `IsDying` 残留 `true`（当前无代码消费，属潜在隐患）。
+- **影响**：战败→重开，开局自机位置/姿态异常，破坏手感与节奏。
+- **建议修法**：`RestoreForStage` 补充 `Position`（由 Main 重置到出生点）、`Rotation = 0`、`IsDying = false`、`_fallVelocity = Vector2.Zero`。
+- **状态**：登记待复核。
+
+### BUG-011 · BossConfig.tres 属性名仍是 snake_case，配置静默不生效 + 探针无区分度（高 · 数据驱动失效，BUG-005 同类）
+- **位置**：`data/BossConfig.tres`（`max_hp = 60`、`move_speed = 40.0`、`bullet_speed = 160.0`、`ring_count = 16`…均为 snake_case）
+- **现象**：按 BUG-005 已实证的规则（Godot 4.7 C# `[Export]` 在 .tres 中以 **PascalCase** 序列化；snake_case 不反序列化），`BossConfig.tres` 的字段**全部未生效**，Boss 静默跑代码默认值（`MaxHp=50 / MoveSpeed=30 / BulletSpeed=200 / RingCount=12 / RingInterval=2.0 / SpiralCount=6 / SpiralInterval=0.7 / AimedInterval=3.0`），与制作人配置（60/160/16/1.6/8/0.5/2.2）不符。
+- **探针盲区**：`ProbeBossConfig` 断言 `boss.MaxHp == cfg.MaxHp`——当 .tres 未反序列化时 `cfg` 取默认值 50，与代码默认 50 **恒等 → 探针空转通过**，无法提供区分度。`EnemyConfig`/`PlayerConfig` 已重写为 PascalCase 生效，**仅 Boss 遗漏**。
+- **影响**：Boss 战数值与设计不符且无人察觉；若后续调参只改 .tres 会白改。
+- **建议修法**：把 `BossConfig.tres` 键名重写为 PascalCase（如 `MaxHp = 60`）；并把 `ProbeBossConfig`/`ProbeEnemyConfig` 改为「显式区分度」——断言 `cfg.MaxHp != 代码默认值`（哨兵值），杜绝空转。
+- **状态**：登记待复核。
+
+### BUG-012 · 小项聚合（低 · 不阻塞）
+- `Engine.TimeScale` 由 `FeedbackSystem.HitStop` 全局置 `0.05`，无复位兜底：死亡/胜利瞬间暂停时，`Driver`（GameManager 下、可暂停）被暂停 → 恢复后仍需约 1s（缩放时间）才还原 1.0；`Main.SetupStage` 未显式 `Engine.TimeScale = 1f`。建议 SetupStage 开头强制复位。
+- `EnemyConfig` 已开 `MoveSpeed=40`（小怪追玩家），但接触伤害未落地：Enemy 是 Area2D、`CollisionMask=0`、无 overlap 处理，`ContactDamage` 配置了也不生效——小怪会"贴上"玩家却无伤害反馈（若属占位可标注 `[PLACEHOLDER]`）。
+- 探针风格注意：凡"代码默认值 == 配置文件值"的探针都易空转，统一用哨兵值做区分度（见 BUG-011）。
 
 ## 三、修复纪律提醒
 
