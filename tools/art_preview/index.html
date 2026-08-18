@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>魔女协议 · 美术素材预览器（模拟游戏渲染）</title>
+<style>
+  :root { --panel:#14141f; --panel2:#1d1d2e; --text:#e8e6f5; --dim:#8a87a5; --accent:#9a6cff; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0b0b14; color:var(--text); font-family:"Microsoft YaHei", system-ui, sans-serif; }
+  header { padding:14px 20px; border-bottom:1px solid #2a2a40; display:flex; align-items:baseline; gap:14px; }
+  header h1 { font-size:17px; color:var(--accent); letter-spacing:1px; }
+  header span { font-size:12px; color:var(--dim); }
+  .wrap { display:flex; flex-direction:column; align-items:center; padding:16px 20px; gap:14px; }
+  /* 战场（模拟游戏 1280x720，缩放适配） */
+  .stage { position:relative; width:min(100%, 1080px); aspect-ratio:16/9; overflow:hidden;
+           border:1px solid #33335a; border-radius:8px; background:#000; box-shadow:0 0 40px rgba(90,60,200,.15); }
+  .stage img { position:absolute; }
+  #bgImg { inset:0; width:100%; height:100%; object-fit:cover; }
+  #playerImg { left:50%; bottom:9%; transform:translateX(-50%); height:17%; image-rendering:pixelated; }
+  #bossImg { left:50%; top:16%; transform:translateX(-50%); height:22%; display:none; image-rendering:pixelated; filter:drop-shadow(0 0 14px rgba(120,80,255,.35)); }
+  #familiarImg { left:56%; bottom:20%; height:7%; display:none; image-rendering:pixelated; filter:drop-shadow(0 0 10px rgba(160,120,255,.6)); }
+  #ringImg { left:50%; bottom:9%; transform:translate(-50%,-50%); height:42%; pointer-events:none; display:none; opacity:.85; mix-blend-mode:screen; }
+  #orbitImg { left:50%; bottom:9%; transform:translate(-50%,-50%); height:56%; pointer-events:none; display:none; opacity:.8; mix-blend-mode:screen; }
+  #bulletsCanvas { position:absolute; inset:0; pointer-events:none; }
+  .stage .tag { position:absolute; right:10px; bottom:8px; font-size:11px; color:#cfc9ff88; background:#00000055; padding:2px 8px; border-radius:4px; }
+  /* 控制面板 */
+  .controls { width:min(100%, 1080px); background:var(--panel); border:1px solid #2a2a40; border-radius:8px; padding:14px; display:flex; flex-direction:column; gap:10px; }
+  .row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .row .label { width:64px; font-size:12px; color:var(--dim); flex-shrink:0; }
+  .btn { background:var(--panel2); color:var(--text); border:1px solid #3a3a5a; border-radius:6px;
+         padding:5px 12px; font-size:12px; cursor:pointer; transition:.15s; }
+  .btn:hover { border-color:var(--accent); color:#fff; }
+  .btn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.small { padding:3px 9px; font-size:11px; }
+  .sep { width:1px; height:18px; background:#3a3a5a; margin:0 4px; }
+  footer { text-align:center; padding:10px; font-size:11px; color:var(--dim); }
+</style>
+</head>
+<body>
+<header>
+  <h1>✦ 魔女协议 · 美术素材预览器</h1>
+  <span>模拟游戏渲染样式：背景 + 自机 + 僚机 + 弹幕 + 特效叠加预览（候选一键切换）</span>
+</header>
+
+<div class="wrap">
+  <div class="stage" id="stage">
+    <img id="bgImg" alt="背景">
+    <canvas id="bulletsCanvas"></canvas>
+    <img id="ringImg" alt="星环">
+    <img id="orbitImg" alt="星轨">
+    <img id="familiarImg" alt="僚机">
+    <img id="playerImg" alt="黎歌">
+    <img id="bossImg" alt="Boss">
+    <div class="tag" id="stageTag">渲染预览</div>
+  </div>
+
+  <div class="controls" id="controls">
+    <div class="row"><span class="label">背景</span><span id="bgGroup" class="group"></span></div>
+    <div class="row"><span class="label">Boss 战斗</span><span id="bossGroup" class="group"></span></div>
+    <div class="row"><span class="label">僚机</span><span id="familiarGroup" class="group"></span></div>
+    <div class="row"><span class="label">玩家弹</span><span id="pbGroup" class="group"></span></div>
+    <div class="row"><span class="label">敌弹</span><span id="ebGroup" class="group"></span></div>
+    <div class="row"><span class="label">特效</span><span id="fxGroup" class="group"></span>
+      <span class="sep"></span><span id="orbitGroup" class="group" style="margin-left:2px"></span></div>
+    <div class="row"><span class="label">密度</span>
+      <input type="range" id="density" min="40" max="400" value="160" style="width:180px">
+      <span id="densityVal" style="font-size:12px;color:var(--dim)">160</span>
+      <span class="sep"></span>
+      <button class="btn small" id="pauseBtn">暂停粒子</button>
+      <button class="btn small" id="resetBtn">重置</button>
+    </div>
+  </div>
+</div>
+<footer>素材为 ComfyUI 候选 · 正式定稿以游戏内实机验收为准（见 docs/美术生产约束与升级规划-v1.md）</footer>
+
+<script>
+const A = (p) => "../../" + p;
+const assets = {
+  bg: [
+    { name:"星屑雨（正式）", src:A("assets/backgrounds/bg_deep_space.png") },
+    { name:"银河斜带", src:A("assets/backgrounds/bg_cand3_milkyway.png") },
+    { name:"极光", src:A("assets/backgrounds/bg_cand2_aurora.png") },
+    { name:"静月深空", src:A("assets/backgrounds/bg_cand3_silentmoon.png") },
+    { name:"深空星云", src:A("assets/backgrounds/bg_cand_nebula.png") },
+    { name:"天空魔法阵", src:A("assets/backgrounds/bg_cand_magiccircle.png") },
+  ],
+  boss: [
+    { name:"无", src:null },
+    { name:"Boss 候选 1", src:A("assets/characters/boss_astra/boss_astra_battle_ready_v1.png") },
+    { name:"Boss 候选 2", src:A("assets/characters/boss_astra/boss_astra_battle_ready_v2.png") },
+  ],
+  familiar: [
+    { name:"无", src:null },
+    { name:"星灵 1", src:A("assets/characters/rika/familiar_ready_v1.png") },
+    { name:"星灵 2", src:A("assets/characters/rika/familiar_ready_v2.png") },
+  ],
+  pb: [
+    { name:"原版星弹", src:A("assets/bullets/bullet_star.png"), img:null },
+    { name:"升级形态 1", src:A("assets/bullets/player_bullet_lv2_ready_v1.png") },
+    { name:"升级形态 2", src:A("assets/bullets/player_bullet_lv2_ready_v2.png") },
+  ],
+  eb: [
+    { name:"占位圆", src:null, img:null },
+    { name:"水晶碎 1", src:A("assets/bullets/enemy_bullet_crystal_ready_v1.png") },
+    { name:"水晶碎 2", src:A("assets/bullets/enemy_bullet_crystal_ready_v2.png") },
+  ],
+  ring: [
+    { name:"无", src:null },
+    { name:"星环 1", src:A("assets/effects/fx_star_ring_ready_v1.png") },
+    { name:"星环 2", src:A("assets/effects/fx_star_ring_ready_v2.png") },
+  ],
+  orbit: [
+    { name:"无", src:null },
+    { name:"星轨 1", src:A("assets/effects/fx_star_orbit_ready_v1.png") },
+    { name:"星轨 2", src:A("assets/effects/fx_star_orbit_ready_v2.png") },
+  ],
+};
+
+const sel = { bg:0, boss:0, familiar:0, pb:0, eb:1, ring:1, orbit:1 };
+
+// ---- DOM ----
+const $ = (id) => document.getElementById(id);
+const bgImg = $("bgImg"), bossImg = $("bossImg"), famImg = $("familiarImg");
+const ringImg = $("ringImg"), orbitImg = $("orbitImg");
+const canvas = $("bulletsCanvas"), ctx = canvas.getContext("2d");
+const stage = $("stage");
+
+function sizeCanvas() {
+  const r = stage.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = r.width * dpr; canvas.height = r.height * dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  stage.style.setProperty("--w", r.width + "px"); stage.style.setProperty("--h", r.height + "px");
+}
+window.addEventListener("resize", sizeCanvas);
+
+// 图片预加载缓存
+const imgCache = {};
+function getImg(src) {
+  if (src == null) return null;
+  if (!imgCache[src]) { const im = new Image(); im.src = src; imgCache[src] = im; }
+  return imgCache[src];
+}
+
+// ---- 控制面板生成 ----
+function buildGroup(groupId, key, apply) {
+  const g = $(groupId);
+  g.innerHTML = "";
+  assets[key].forEach((it, i) => {
+    const b = document.createElement("button");
+    b.className = "btn small" + (sel[key] === i ? " active" : "");
+    b.textContent = it.name;
+    b.onclick = () => { sel[key] = i; apply(); refreshGroups(key); };
+    g.appendChild(b);
+  });
+}
+function refreshGroups(key) {
+  const map = { bg:"bgGroup", boss:"bossGroup", familiar:"familiarGroup", pb:"pbGroup", eb:"ebGroup", ring:"fxGroup", orbit:"orbitGroup" };
+  document.querySelectorAll("#" + map[key] + " .btn").forEach((b, i) => {
+    b.classList.toggle("active", i === sel[key]);
+  });
+}
+
+// ---- 渲染应用 ----
+function applyVisual() {
+  bgImg.src = assets.bg[sel.bg].src;
+  const b = assets.boss[sel.boss];
+  bossImg.src = b.src || ""; bossImg.style.display = b.src ? "block" : "none";
+  const f = assets.familiar[sel.familiar];
+  famImg.src = f.src || ""; famImg.style.display = f.src ? "block" : "none";
+  const r = assets.ring[sel.ring];
+  ringImg.src = r.src || ""; ringImg.style.display = r.src ? "block" : "none";
+  const o = assets.orbit[sel.orbit];
+  orbitImg.src = o.src || ""; orbitImg.style.display = o.src ? "block" : "none";
+  $("stageTag").textContent =
+    `${assets.bg[sel.bg].name} · ${assets.boss[sel.boss].name} · ${assets.familiar[sel.familiar].name} · ` +
+    `${assets.pb[sel.pb].name} / ${assets.eb[sel.eb].name} · 星环${sel.ring?1:0} 星轨${sel.orbit?1:0}`;
+}
+
+// ---- 弹幕粒子（模拟游戏渲染）----
+const bullets = [];
+let paused = false;
+function spawnPlayerBullet() {
+  const r = stage.getBoundingClientRect();
+  const x = r.width * (0.5 + (Math.random()-0.5)*0.24);
+  const y = r.height * 0.86;
+  bullets.push({ kind:0, x, y, vx:(Math.random()-0.5)*12, vy:-(r.height*0.7), img:getImg(assets.pb[sel.pb].src), r:r.height*0.016 });
+}
+function spawnEnemyBullet() {
+  const r = stage.getBoundingClientRect();
+  const x = r.width * (0.12 + Math.random()*0.76);
+  const y = -r.height*0.05;
+  const ang = Math.PI/2 + (Math.random()-0.5)*1.6; // 大致向下，带散开
+  const sp = r.height * (0.25 + Math.random()*0.2);
+  bullets.push({ kind:1, x, y, vx:Math.cos(ang)*sp, vy:Math.sin(ang)*sp, img:getImg(assets.eb[sel.eb].src), r:r.height*0.02 });
+}
+function tickBullets(dt) {
+  const r = stage.getBoundingClientRect();
+  const rate = parseInt($("density").value);
+  if (Math.random() < dt*rate*0.5) spawnPlayerBullet();
+  if (Math.random() < dt*rate*0.32) spawnEnemyBullet();
+  for (let i=bullets.length-1; i>=0; i--) {
+    const b = bullets[i];
+    b.x += b.vx*dt; b.y += b.vy*dt;
+    if (b.y < -40 || b.y > r.height+40 || b.x < -40 || b.x > r.width+40) bullets.splice(i,1);
+  }
+}
+function drawBullets() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  for (const b of bullets) {
+    if (b.img && b.img.complete && b.img.naturalWidth > 0) {
+      ctx.drawImage(b.img, b.x-b.r, b.y-b.r, b.r*2, b.r*2);
+    } else {
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
+      ctx.fillStyle = b.kind===0 ? "rgba(255,240,255,.9)" : "rgba(170,110,255,.9)";
+      ctx.fill();
+    }
+  }
+}
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now-last)/1000); last = now;
+  if (!paused) { tickBullets(dt); }
+  drawBullets();
+  requestAnimationFrame(loop);
+}
+
+// ---- 初始化 ----
+buildGroup("bgGroup","bg",applyVisual);
+buildGroup("bossGroup","boss",applyVisual);
+buildGroup("familiarGroup","familiar",applyVisual);
+buildGroup("pbGroup","pb",applyVisual);
+buildGroup("ebGroup","eb",applyVisual);
+buildGroup("fxGroup","ring",applyVisual);
+buildGroup("orbitGroup","orbit",applyVisual);
+sizeCanvas(); applyVisual(); requestAnimationFrame(loop);
+
+$("density").oninput = (e) => $("densityVal").textContent = e.target.value;
+$("pauseBtn").onclick = () => { paused = !paused; $("pauseBtn").textContent = paused ? "继续粒子" : "暂停粒子"; };
+$("resetBtn").onclick = () => { bullets.length = 0; };
+</script>
+</body>
+</html>

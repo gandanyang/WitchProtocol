@@ -40,6 +40,21 @@ def make_alpha(rgb_img):
     return dist.point(lut)
 
 
+def make_alpha_black(rgb_img):
+    """黑底抠图 alpha（发光特效/深色底用）：亮度下界 = min(R,G,B)（纯黑=0），暗部透明、亮部不透明。"""
+    r, g, b = rgb_img.split()
+    mn = ImageChops.darker(ImageChops.darker(r, g), b)
+    lut = [0] * 256
+    for t in range(256):
+        if t < 25:
+            lut[t] = 0
+        elif t > 90:
+            lut[t] = 255
+        else:
+            lut[t] = int((t - 25) / (90 - 25) * 255)
+    return mn.point(lut)
+
+
 def defringe(rgba):
     """去白边 halo：对 alpha 过渡带像素，用周围最不透明的颜色替换（简单 1px 收缩采样）。"""
     # 轻微处理即可：把 alpha < 255 且 RGB 偏白的像素颜色向里收缩
@@ -50,6 +65,7 @@ def defringe(rgba):
 
 def main():
     src, dst, size, rotate = SRC, DST, OUT_SIZE, ROTATE
+    mode = "white"  # white=白底抠图（角色/背景主体）；black=黑底抠图（发光特效/深色底）
     if "--src" in sys.argv:
         src = sys.argv[sys.argv.index("--src") + 1]
     if "--out" in sys.argv:
@@ -58,16 +74,18 @@ def main():
         size = int(sys.argv[sys.argv.index("--size") + 1])
     if "--rotate" in sys.argv:
         rotate = int(sys.argv[sys.argv.index("--rotate") + 1])
+    if "--mode" in sys.argv:
+        mode = sys.argv[sys.argv.index("--mode") + 1]
 
     img = Image.open(src).convert("RGBA")
-    alpha = make_alpha(img.convert("RGB"))
+    alpha = make_alpha(img.convert("RGB")) if mode == "white" else make_alpha_black(img.convert("RGB"))
     img.putalpha(alpha)
     if rotate:
         img = img.rotate(rotate, expand=False, resample=Image.BICUBIC)  # 绕中心旋转（尺寸不变）
     img = img.resize((size, size), Image.LANCZOS)
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     img.save(dst)
-    print(f"OK: {src} ({img.size[0]}x{img.size[1]}) -> {dst} ({os.path.getsize(dst)}B, 透明背景, rotate={rotate})")
+    print(f"OK: {src} ({img.size[0]}x{img.size[1]}) -> {dst} ({os.path.getsize(dst)}B, 透明背景, mode={mode}, rotate={rotate})")
 
 
 if __name__ == "__main__":

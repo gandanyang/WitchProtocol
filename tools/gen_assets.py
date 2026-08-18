@@ -188,6 +188,37 @@ JOBS = [
                  "depth, the lower part of the sky fades to near-black, a single very thin star trail far in the "
                  "background, huge empty dark space in the middle, soft gradient, clean flat anime style, "
                  "minimalist game stage background art for a vertical bullet hell shooter, no text, no watermark")),
+    # ---- S 级：M2 战斗视觉素材（Boss 战斗形态 / 僚机 / 弹幕升级形态 / 特效；白底或黑底供 prep）----
+    dict(name="boss_astra_battle", w=1024, h=1024, dir="characters/boss_astra",
+         prompt=("anime game sprite of a majestic witch queen viewed from behind and slightly above, flying upward, "
+                 "her head at the top of the frame pointing up, a huge ornate black and gold crown on her head, "
+                 "only the back of her head and shoulders visible, no face, long dark hair with gold ornaments "
+                 "flowing downward behind her, black and gold gothic gown with faint star patterns, wide ornate "
+                 "sleeves trailing behind, the character centered occupying about half the image height, "
+                 "plain solid white background, clean flat anime style, soft even lighting, "
+                 "small STG boss character sprite, top-down view, no text, no watermark")),
+    dict(name="familiar", w=1024, h=1024, dir="characters/rika",
+         prompt=("anime game sprite of a tiny magical star spirit familiar, a small glowing violet orb core with "
+                 "two small translucent star-shaped wings, a tiny silver crescent crown on top, a short glowing "
+                 "comet tail, cute and elegant, centered occupying about half the image height, "
+                 "plain solid white background, clean flat anime style, soft even lighting, "
+                 "small familiar companion sprite, top-down view, no text, no watermark")),
+    dict(name="player_bullet_lv2", w=1024, h=1024, dir="bullets",
+         prompt=("game bullet texture of an upgraded glowing star projectile, a bright white violet star core with "
+                 "a short comet trail and two small orbiting sparks, centered, plain solid black background, "
+                 "clean flat anime style, high visibility, game player bullet asset, no text")),
+    dict(name="enemy_bullet_crystal", w=1024, h=1024, dir="bullets",
+         prompt=("game bullet texture of a violet crystal shard projectile, a sharp glowing amethyst fragment with "
+                 "a faint purple glow around it, centered, plain solid black background, clean flat anime style, "
+                 "high visibility, game enemy bullet asset, no text")),
+    dict(name="fx_star_ring", w=1024, h=1024, dir="effects",
+         prompt=("game effect texture of a rotating ring of small glowing star sparks around a central point, "
+                 "the ring made of tiny violet and silver stars connected by a faint light line, centered, "
+                 "plain solid black background, clean flat anime style, game special effect asset, no text")),
+    dict(name="fx_star_orbit", w=1024, h=1024, dir="effects",
+         prompt=("game effect texture of two curved glowing star trails orbiting in an ellipse, violet and silver "
+                 "light ribbons with tiny star sparkles along them, centered, plain solid black background, "
+                 "clean flat anime style, game special effect asset, no text")),
     # ---- S 级下一批：受击/击杀反馈特效 + 升级 UI + 魔法阵（黑底便于去底）----
     dict(name="hit_flash", w=1024, h=1024, dir="effects",
          prompt=("game visual effect sprite, a soft white-violet radial flash burst, expanding star sparks and "
