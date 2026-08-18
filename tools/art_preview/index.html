@@ -165,6 +165,8 @@ function refreshGroups(key) {
 // ---- 渲染应用 ----
 function applyVisual() {
   bgImg.src = assets.bg[sel.bg].src;
+  // 玩家本体（黎歌 v3 定稿，俯视+星翼；正式精灵，无候选切换）
+  playerImg.src = A("assets/characters/rika/battlesprite/rika_battlesprite_ready.png");
   const b = assets.boss[sel.boss];
   bossImg.src = b.src || ""; bossImg.style.display = b.src ? "block" : "none";
   const f = assets.familiar[sel.familiar];
