@@ -15,7 +15,7 @@ public partial class TestSuite : Node
 {
     private const string ReportDir = "user://test_reports";
 
-    public override void _Ready()
+    public override async void _Ready()
     {
         var args = OS.GetCmdlineUserArgs();
         var raw = ArgValue(args, "probes");
@@ -36,6 +36,8 @@ public partial class TestSuite : Node
         GD.Print($"== TestSuite 完成：{results.Count - failed}/{results.Count} 通过 ==");
 
         WriteReport(ids, results);
+        // 等一帧再退出：让探针里 QueueFree 的节点真正释放，避免退出时 RID/ObjectDB 泄漏告警。
+        await ToSignal(GetTree().CreateTimer(0.05f), "timeout");
         GetTree().Quit(failed == 0 ? 0 : 1);
     }
 

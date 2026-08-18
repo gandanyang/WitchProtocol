@@ -64,4 +64,7 @@ public partial class BulletPool : Node
 
     public int ActiveCount => _active.Count;
     public int PooledCount => _pool.Count;
+
+    /// 当前存活子弹（供 Main 自写距离碰撞检测遍历；返回内部列表只读视图，勿在遍历中修改）。
+    public IReadOnlyList<Bullet> Active => _active;
 }

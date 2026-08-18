@@ -15,11 +15,15 @@ namespace MagicThunder.Player;
 /// 边界：限制在 PlayfieldSize 内（留边距）。
 /// 视觉：优先 AI 黑底战斗 sprite + 去黑 shader；加载失败回退占位图。
 ///
+/// 帧率优化专项（2026-08-19）：去物理体——Node2D 不是 CharacterBody2D，无 CollisionShape2D/碰撞层，
+/// 移动改为自写速度积分（Position += velocity*dt），不再 MoveAndSlide（省下 PhysicsServer 每帧步进）。
+/// 被敌弹命中由 Main 里的自写距离碰撞检测驱动（见 Main.CheckCollisions）。
+///
 /// MVP 垂直切片（本关结束统一结算升级）：
 ///  武器等级 WeaponLevel（1 单发 / 2 双发 / 3 三向），由 <see cref="ShotSpecs"/> 纯函数产出弹幕规格；
 ///  护盾 Shield 抵挡一次伤害；升级经 <see cref="ApplyUpgrade"/> 落地（跨关保留，见 Main）。
 /// </summary>
-public partial class PlayerController : CharacterBody2D
+public partial class PlayerController : Node2D
 {
     private const string DefaultConfigPath = "res://data/PlayerConfig.tres";
     // 离线预处理精灵图（tools/prep_sprite.py 产出）：白底大图 → 256px 透明背景高清小图。
@@ -34,6 +38,11 @@ public partial class PlayerController : CharacterBody2D
     private const float DoubleFanDeg = 8f;
     /// Aimed 规格的目标距离（确定方向用，长度无关紧要）。
     private const float UpDistance = 100f;
+    // M2 局内成长：经验曲线。Lv→Lv+1 所需经验 = 基础 + 等级步进（数值膨胀小，弹幕形态才是爽点）。
+    private const int ExpBase = 5;
+    private const int ExpPerLevel = 4;
+    /// 引力升级：每次扩大磁吸半径（px）。
+    public const float MagnetUpgradeBonus = 50f;
 
     public float MoveSpeed = 320f;
     public float FocusSpeedRatio = 0.5f;
@@ -69,6 +78,8 @@ public partial class PlayerController : CharacterBody2D
     private bool _blinkOn;
     private bool _hasSprite;
     private float _hitFlashTimer;
+    // 帧率优化专项：自写速度（替代 CharacterBody2D.Velocity/MoveAndSlide）
+    private Vector2 _velocity;
 
     // ---- 战败坠落状态（供 DeathSequence 驱动；死亡演出 = 灵魂，见 M4-1）----
     private Vector2 _fallVelocity;
@@ -85,6 +96,23 @@ public partial class PlayerController : CharacterBody2D
     /// 是否处于战败坠落状态（死亡演出中，不响应输入/射击）。
     public bool IsDying { get; private set; }
 
+    // ---- M2 局内成长：经验 / 等级 / 穿透 / 引力 ----
+    /// 当前等级（1 起）。局内吃星之残片升级。
+    public int Level { get; private set; } = 1;
+    /// 当前经验（满 ExpToNext 升级）。
+    public int Exp { get; private set; }
+    /// 升到下一级所需经验（随等级递增）。
+    public int ExpToNext { get; private set; } = ExpBase;
+    /// 穿透：玩家弹命中不消失（穿怪），割草爽感核心升级。
+    public bool Pierce { get; private set; }
+    /// 磁吸半径（px）：星之残片吸收范围，引力升级放大。
+    public float MagnetRadius { get; private set; } = Pickup.Pickup.PickupMagnetBase;
+
+    // 基础值快照（_Ready 读配置后记录，ResetProgression 恢复到初始态）
+    private int _baseMaxHp;
+    private float _baseFireInterval;
+    private float _baseBulletSpeed;
+
     public override void _Ready()
     {
         // 数据驱动：优先加载 PlayerConfig.tres；失败回退默认值（不阻断运行）
@@ -98,12 +126,11 @@ public partial class PlayerController : CharacterBody2D
             BulletSpeed = cfg.BulletSpeed;
         }
         Hp = MaxHp;
+        _baseMaxHp = MaxHp;      // 记录配置基础值，ResetProgression 恢复用
+        _baseFireInterval = FireInterval;
+        _baseBulletSpeed = BulletSpeed;
 
-        // 碰撞体：供敌弹 body_entered 命中检测（敌弹 mask=玩家层 → 命中本体会触发）
-        CollisionLayer = CollisionLayers.Player; // 协议见 CollisionLayers，显式声明防散落
-        CollisionMask = 0; // 玩家不主动检测
-        AddChild(new CollisionShape2D { Shape = new CircleShape2D { Radius = HitboxRadius } });
-
+        // 帧率优化专项：去物理体——不再挂 CollisionShape2D/碰撞层，命中由 Main 距离检测驱动
         TryAttachBattleSprite();
         QueueRedraw();
     }
@@ -178,12 +205,13 @@ public partial class PlayerController : CharacterBody2D
         _hitFlashTimer = 0f;
         IsDying = false;
         _fallVelocity = Vector2.Zero;
+        _velocity = Vector2.Zero;
         Rotation = 0f;
         Modulate = Colors.White;
         _fireTimer = 0f;
     }
 
-    /// 结算升级落地（跨关保留，本关内立即生效；由 Main.OnPickUpgrade 调用）。
+    /// 结算升级落地（局内即时升级/重开前调用，立即生效；由 Main 调用）。
     public void ApplyUpgrade(UpgradeType type)
     {
         switch (type)
@@ -204,7 +232,68 @@ public partial class PlayerController : CharacterBody2D
             case UpgradeType.Shield:
                 Shield++;
                 break;
+            case UpgradeType.Pierce:
+                Pierce = true;
+                break;
+            case UpgradeType.Magnet:
+                MagnetRadius += MagnetUpgradeBonus;
+                break;
         }
+    }
+
+    /// 局内道具吸收落地（Powerup 吸收 → 即时增益）。
+    /// Shield 护盾 +1；Life 回 1 血（不超上限）；Fire 武器 +1（满级转射速 +15%）。
+    public void ApplyPowerup(Pickup.PowerupKind kind)
+    {
+        switch (kind)
+        {
+            case Pickup.PowerupKind.Shield:
+                Shield++;
+                break;
+            case Pickup.PowerupKind.Life:
+                Hp = Mathf.Min(Hp + 1, MaxHp);
+                break;
+            case Pickup.PowerupKind.Fire:
+                if (WeaponLevel < MaxWeaponLevel) WeaponLevel++;
+                else FireInterval *= 0.85f;
+                break;
+        }
+        QueueRedraw(); // 护盾环可能变化
+    }
+
+    /// 局内加经验（星之残片吸收）。返回本次升级次数（0 = 未升级）。
+    /// 经验曲线：Lv→Lv+1 需要 ExpBase + (Lv-1)*ExpPerLevel（纯函数，探针可验证）。
+    public static int ExpToNextFor(int level) => ExpBase + (level - 1) * ExpPerLevel;
+
+    public int AddExp(int amount)
+    {
+        Exp += amount;
+        int ups = 0;
+        while (Exp >= ExpToNext)
+        {
+            Exp -= ExpToNext;
+            Level++;
+            ExpToNext = ExpToNextFor(Level);
+            ups++;
+        }
+        return ups;
+    }
+
+    /// 新一局开局（从主菜单进入）：把局内成长全部复位到配置基础值（经验/等级/武器/盾/穿透/引力）。
+    /// 区别于 RestoreForStage（同关重开保留成长，便于打 Boss 前累积）。
+    public void ResetProgression()
+    {
+        Level = 1;
+        Exp = 0;
+        ExpToNext = ExpBase;
+        WeaponLevel = 1;
+        Shield = 0;
+        Pierce = false;
+        MagnetRadius = Pickup.Pickup.PickupMagnetBase;
+        MaxHp = _baseMaxHp;
+        FireInterval = _baseFireInterval;
+        BulletSpeed = _baseBulletSpeed;
+        RestoreForStage();
     }
 
     /// 武器形态纯函数：按等级返回 1/2/3 条发射规格（探针直接验证，不依赖场景）。
@@ -278,7 +367,6 @@ public partial class PlayerController : CharacterBody2D
         if (IsDying)
         {
             ApplyDeathFall(dt);
-            MoveAndSlide();
             return;
         }
 
@@ -287,8 +375,8 @@ public partial class PlayerController : CharacterBody2D
         var ratio = Input.IsActionPressed("focus") ? FocusSpeedRatio : 1f;
         var targetVel = input * MoveSpeed * ratio;
         float accel = input.LengthSquared() > 0f ? MoveAccel : MoveDecel;
-        Velocity = Velocity.MoveToward(targetVel, accel * dt);
-        MoveAndSlide();
+        _velocity = _velocity.MoveToward(targetVel, accel * dt);
+        Position += _velocity * dt;
 
         // 边界限制（PlayfieldSize 内留边距）
         var size = Autoload.GameManager.I?.PlayfieldSize ?? new Vector2(1280, 720);
@@ -332,7 +420,23 @@ public partial class PlayerController : CharacterBody2D
 }
 
 /// <summary>
-/// 结算升级选项（本关结束统一结算，见 Main）。置于命名空间顶层，
+/// 局内升级选项（三选一，见 Main）。置于命名空间顶层，
 /// 让 Main / Settlement 通过 `using MagicThunder.Player;` 直接引用。
 /// </summary>
-public enum UpgradeType { Weapon, RapidFire, BulletSpeed, MaxHp, Shield }
+public enum UpgradeType
+{
+    /// 武器等级 +1（单发→双发→三向）。
+    Weapon,
+    /// 连射提升（射速 -25%）。
+    RapidFire,
+    /// 弹速提升（+20%）。
+    BulletSpeed,
+    /// 生命上限 +1（并回 1 血）。
+    MaxHp,
+    /// 获得护盾 ×1（抵挡一次伤害）。
+    Shield,
+    /// 穿透：玩家弹命中不消失，穿怪。
+    Pierce,
+    /// 引力：星之残片磁吸范围扩大。
+    Magnet,
+}

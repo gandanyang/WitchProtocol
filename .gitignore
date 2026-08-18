@@ -4,6 +4,12 @@ export_presets.cfg
 *.translation
 *.uid.meta
 
+# ===== Android 打包 =====
+# android/ 是 Godot「Install Android Build Template」生成的构建模板（200MB+，可由项目菜单重装）
+android/
+# 导出产物（APK/AAB）
+build/
+
 # ===== C# / .NET =====
 bin/
 obj/

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c3vt8g3vikyod"
-path="res://.godot/imported/bg_deep_space.jpg-8fd0f0990c6e006088b6f289e9afce91.ctex"
+uid="uid://chuy4pblav37d"
+path="res://.godot/imported/fx_star_orbit_v1.png-422cd8c682e878647a147116be808f5b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/backgrounds/bg_deep_space.jpg"
-dest_files=["res://.godot/imported/bg_deep_space.jpg-8fd0f0990c6e006088b6f289e9afce91.ctex"]
+source_file="res://assets/effects/fx_star_orbit_v1.png"
+dest_files=["res://.godot/imported/fx_star_orbit_v1.png-422cd8c682e878647a147116be808f5b.ctex"]
 
 [params]
 

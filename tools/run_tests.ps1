@@ -24,7 +24,7 @@ Pop-Location
 if ($code -ne 0) { Write-Host '构建失败，已中止。' -ForegroundColor Red; exit $code }
 
 # 2) headless 跑探针
-$probes = 'boot,event,save,pool,pattern,enemy_config,weapon,boss_config,score,m1_hitbox,m1_focus,m1_iframes,m1_autofire,m1_enemy_move,m1_enemybullet_world,sfx,feedback,deathfall,m1_orphan,m1_enemy_contact'
+$probes = 'boot,event,save,pool,pattern,enemy_config,weapon,boss_config,score,m1_hitbox,m1_focus,m1_iframes,m1_autofire,m1_enemy_move,m1_enemybullet_world,sfx,feedback,deathfall,m1_orphan,m1_enemy_contact,m2_pickup,m2_exp,m2_upgrade,m2_enemy_bomber,m2_enemy_sniper,m2_enemy_sprayer,m2_waves,m2_loop,m2_powerup,m2_touch'
 if ($args.Count -gt 0) { $probes = $args[0] }
 Write-Host "== step 2/2 : headless 跑探针 [$probes] =="
 

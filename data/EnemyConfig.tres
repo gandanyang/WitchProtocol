@@ -4,8 +4,10 @@
 
 [resource]
 script = ExtResource("1")
+Kind = 0
 MaxHp = 5
 MoveSpeed = 40.0
-ShootInterval = 1.2
+ShootInterval = 2.2
 BulletSpeed = 180.0
 ContactDamage = 1
+DropExp = 1

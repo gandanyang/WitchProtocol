@@ -4,13 +4,16 @@ using MagicThunder.Autoload;
 namespace MagicThunder.Scenes;
 
 /// <summary>
-/// 主菜单（MVP 最小版）：标题 + 开始游戏。
-/// 战败 CG 菜单的「回到主菜单」入口（ChangeSceneToFile 切回本场景）。
-/// 界面全部代码构建（与 Hud/Settlement 同风格）。背景复用深空星空素材。
-/// </summary>
-public partial class TitleScene : Control
-{
-    private const string BackgroundPath = "res://assets/backgrounds/bg_deep_space.jpg";
+    /// 主菜单（MVP 最小版）：标题 + 开始游戏。
+    /// 战败 CG 菜单的「回到主菜单」入口（ChangeSceneToFile 切回本场景）。
+    /// 界面全部代码构建（与 Hud/Settlement 同风格）。背景复用深空星空素材。
+    /// </summary>
+    public partial class TitleScene : Control
+    {
+        /// 深空星空背景（与 Main.cs 共用同一张 comfyui 素材）。
+        /// 素材来源：制作人用 comfyui 出图后，导出为 png 放到 res://assets/backgrounds/bg_deep_space.png；
+        /// 文件缺失时回退 default_clear_color（深空色），不会白屏。
+        private const string BackgroundPath = "res://assets/backgrounds/bg_deep_space.png";
 
     public override void _Ready()
     {
@@ -52,15 +55,22 @@ public partial class TitleScene : Control
         // 开始游戏
         var btn = new Button { Text = "开始游戏" };
         btn.SetAnchorsPreset(Control.LayoutPreset.Center);
-        btn.OffsetLeft = -130;
-        btn.OffsetTop = 70;
-        btn.OffsetRight = 130;
+        btn.OffsetLeft = -150;
+        btn.OffsetTop = 66;
+        btn.OffsetRight = 150;
         btn.OffsetBottom = 116;
         btn.AddThemeFontSizeOverride("font_size", 24);
         btn.Pressed += () => GetTree().ChangeSceneToFile("res://scenes/Main.tscn");
         AddChild(btn);
 
-        var hint = new Label { Text = "WASD / 方向键移动 · Shift 低速 · 自动射击" };
+        // 操作提示按平台区分：移动端走虚拟摇杆（D-010 触屏基调），桌面走键鼠
+        bool mobile = OS.HasFeature("mobile");
+        var hint = new Label
+        {
+            Text = mobile
+                ? "拖动屏幕移动 · 按住右下「聚焦」低速 · 自动射击"
+                : "WASD / 方向键移动 · Shift 低速 · 自动射击",
+        };
         hint.SetAnchorsPreset(Control.LayoutPreset.CenterBottom);
         hint.OffsetBottom = -60;
         hint.HorizontalAlignment = HorizontalAlignment.Center;

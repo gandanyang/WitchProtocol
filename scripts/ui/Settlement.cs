@@ -1,11 +1,10 @@
 using System;
 using Godot;
-using MagicThunder.Player;
 
 namespace MagicThunder.UI;
 
 /// <summary>
-/// 结算界面（MVP 垂直切片）：胜利 = 升级三选一；失败 = 重新挑战。
+/// 结算界面（MVP 垂直切片）：胜利 = 成绩结算 + 再次挑战；失败 = 战败 CG + 重新挑战。
 /// ProcessMode=Always：结算时 GetTree().Paused=true，本层仍可交互（按钮可点）。
 /// 界面元素全部代码构建（与 Hud 同风格，不依赖美术资源）。
 /// </summary>
@@ -38,24 +37,19 @@ public partial class Settlement : CanvasLayer
     public new void Show() => _root?.Show();
     public new void Hide() => _root?.Hide();
 
-    /// 胜利结算：战绩 + 三选一升级按钮，点击回调 onPick(index)。
-    public void ShowVictory(int score, int kills, (UpgradeType type, string desc)[] choices, Action<int> onPick)
+    /// 胜利结算：成绩 + 「再次挑战」（新一局从 Lv1 开始）。
+    /// M2 语义调整：升级已改在局内即时发生，胜利不再给升级选择。
+    public void ShowVictory(int score, int kills, int level, Action onRetry)
     {
         _root!.Show();
         if (_cg != null) _cg.Visible = false; // 胜利不显示战败 CG
         ClearBox();
 
         AddTitle("胜利！");
-        AddStats($"分数 {score}  |  击杀 {kills}  |  选择一项强化");
+        AddStats($"分数 {score}  |  击杀 {kills}  |  达到等级 Lv{level}");
+        AddHint("星之残片已收入星图");
         AddSpacer();
-
-        for (int i = 0; i < choices.Length; i++)
-        {
-            int idx = i;
-            AddButton(choices[i].desc, () => onPick(idx));
-        }
-
-        AddHint("点击强化，进入下一关（敌人更强，分数更高）");
+        AddButton("再次挑战", () => onRetry());
     }
 
     /// 失败结算（战败 CG，用户红线）：全屏战败 CG 图 + DEFEATED + 统计 + 「她还活着。」+ 菜单（继续/回到主菜单）。
@@ -122,9 +116,11 @@ public partial class Settlement : CanvasLayer
     private void AddButton(string text, Action onClick)
     {
         var b = new Button { Text = text };
-        b.CustomMinimumSize = new Vector2(380, 44);
+        // 触屏适配：按钮不超出屏宽 72%（小屏不溢出），高度加大便于手指点按
+        float maxW = GetViewport().GetVisibleRect().Size.X * 0.72f;
+        b.CustomMinimumSize = new Vector2(Mathf.Clamp(maxW, 220f, 380f), 56);
         b.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
-        b.AddThemeFontSizeOverride("font_size", 20);
+        b.AddThemeFontSizeOverride("font_size", 22);
         b.Pressed += () => onClick();
         _box!.AddChild(b);
     }

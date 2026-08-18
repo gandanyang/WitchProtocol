@@ -18,6 +18,8 @@
 >
 > ⚠️ **二轮走查快照（2026-08-19 02:5x 起，本次会话）**：工作树此时含 `e70e5f7`（M1 合流）+ 在途改动（音频 SfxPlayer/gen_sfx.py、FeedbackSystem、DeathSequence、CollisionLayers、remove_white shader 等），且**仍在被并行 Agent 实时编辑**——下方 BUG-008~012 基于该快照，**行号/代码可能已随在途编辑漂移，合流后需复核**。
 > 二轮实测：`dotnet build` **0 错误 0 警告**；`tools/run_tests.ps1` **18/18 全绿**；退出**无 RID 泄漏**（BUG-002 复验通过）。配置侧：`EnemyConfig.tres` / `PlayerConfig.tres` 已是 PascalCase（BUG-005 修复生效），但 **`BossConfig.tres` 仍是 snake_case**（见 BUG-011）。
+>
+> ✅ **全量复核（2026-08-19 会话内独立复查）**：BUG-008~012 全部通过（详见 `审查测试报告-2026-08-19.md`）。实测 `dotnet build` 0 错误 0 警告 + `run_tests.ps1` **20/20 全绿**（含 `m1_orphan`/`m1_enemy_contact`）+ `bench.ps1` 压测 **9/9 PASS**。残留备注见报告「五」（BUG-008 波次内孤儿弹不主动清等，非阻塞）。
 
 ## 二、缺陷清单
 
@@ -77,7 +79,7 @@
 - **现象**：小怪被击杀 → `Enemy.QueueFree()` 连同其发射器/`BulletPool` 一起销毁；但**已 reparent 到 `EnemyBullets` 世界层的在飞敌弹存活**，其 `Recycle = Pool.Release` 仍指向**已释放的池**。若该子弹命中玩家（`OnBodyEntered → RecycleSelf`）或命中后回收，会对已释放 GodotObject 调用方法 → Godot C# 抛「访问已释放实例」错误。
 - **影响**：多怪波的常态路径（4/6/8 只逐只阵亡）极易触发；即使不命中，由于原池的 `_Process` 已随池销毁，**出屏回收永远不会执行——波次内幽灵弹不回收**，只在 `Main.SetupStage`（重开关卡）才全清。当前 `m1_enemybullet_world` 探针只验证"子弹进了世界层"，未覆盖此边角。
 - **建议修法**：a) 子弹命中/回收前判 `IsInstanceValid(Recycle 目标)` 或让 Enemy/Boss 阵亡时把世界层内自己派发的子弹一并销毁；b) 或池被释放前把在飞子弹的 `Recycle` 解绑；c) 至少补一条探针：击杀敌人后推进若干帧，断言世界层无该池子弹残留且不报错。
-- **状态**：**已修复**（2026-08-19 WorkBuddy 三轮）——`Bullet.RecycleSelf` 回收前校验 `GodotObject.IsInstanceValid(Recycle.Target)`，无效则 `QueueFree` 自毁（不抛"访问已释放实例"）；`Bullet._PhysicsProcess` 对孤儿弹（Recycle 目标无效）出屏自毁，防幽灵弹无限飞行。`m1_orphan` 探针回归（池释放后 RecycleSelf 不崩）。
+- **状态**：**已修复**（2026-08-19 WorkBuddy 三轮）——`Bullet.RecycleSelf` 回收前校验 `GodotObject.IsInstanceValid(Recycle.Target)`，无效则 `QueueFree` 自毁（不抛"访问已释放实例"）；`Bullet._PhysicsProcess` 对孤儿弹（Recycle 目标无效）出屏自毁，防幽灵弹无限飞行。`m1_orphan` 探针回归（池释放后 RecycleSelf 不崩）。**残留收尾（2026-08-19 会话内）**：`Main.ClearEnemyBullets()` 落地——`wave_cleared` 时清空 `EnemyBullets` 孤儿弹（并作废 B 段碰撞缓存快照），`SetupStage` 复用同一方法；验证 build 0 错误 0 警告 + 20/20 探针全绿。
 
 ### BUG-009 · 战败演出后相机 Zoom 未复位（中 · 视觉/UX）
 - **位置**：`scripts/effects/FeedbackSystem.cs`（`ZoomTo` 只设动画，不提供复位）与 `scripts/scenes/DeathSequence.cs:70`（拉远到 1.45）

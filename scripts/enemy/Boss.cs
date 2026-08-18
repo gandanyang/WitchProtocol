@@ -54,7 +54,8 @@ public partial class Boss : Node2D
     public override void _Ready()
     {
         // 数据驱动：优先加载 BossConfig.tres；失败回退默认值（不阻断运行）
-        var res = ResourceLoader.Load(DefaultConfigPath, "", ResourceLoader.CacheMode.Ignore);
+        // M1-PERF：CacheMode.Reuse 复用缓存——配置是静态内容，避免重复读磁盘 .tres。
+        var res = ResourceLoader.Load(DefaultConfigPath, "", ResourceLoader.CacheMode.Reuse);
         if (res is Data.BossConfig cfg)
         {
             MaxHp = cfg.MaxHp;

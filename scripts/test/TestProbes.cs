@@ -2,6 +2,8 @@ using System.Linq;
 using Godot;
 using MagicThunder.Autoload;
 using MagicThunder.Bullet;
+using MagicThunder.Player;
+using MagicThunder.UI;
 
 namespace MagicThunder.Test;
 
@@ -37,6 +39,19 @@ public static class TestProbes
         // Bug 收口（2026-08-19 三轮）：孤儿弹池兜底 / 敌人接触伤害
         hub.RegisterProbe("m1_orphan", ProbeM1OrphanBullet);
         hub.RegisterProbe("m1_enemy_contact", ProbeM1EnemyContact);
+        // M2 割草爽感（2026-08-19 转玩法）：拾取物 / 经验升级 / 新敌行为 / 5 波 / 升级池
+        hub.RegisterProbe("m2_pickup", ProbeM2Pickup);
+        hub.RegisterProbe("m2_exp", ProbeM2Exp);
+        hub.RegisterProbe("m2_upgrade", ProbeM2Upgrade);
+        hub.RegisterProbe("m2_enemy_bomber", ProbeM2EnemyBomber);
+        hub.RegisterProbe("m2_enemy_sniper", ProbeM2EnemySniper);
+        hub.RegisterProbe("m2_enemy_sprayer", ProbeM2EnemySprayer);
+        hub.RegisterProbe("m2_waves", ProbeM2Waves);
+        hub.RegisterProbe("m2_loop", ProbeM2Loop);
+        // M2 道具（2026-08-19 WorkBuddy）：护盾/生命/火力——吸收派发 + 即时增益落地
+        hub.RegisterProbe("m2_powerup", ProbeM2Powerup);
+        // M2 移动端适配（D-010 触屏基调）：虚拟摇杆方向 → 移动动作映射
+        hub.RegisterProbe("m2_touch", ProbeM2Touch);
     }
 
     /// 启动自检：四个 autoload 单例均已就位，且拿到有效视口。
@@ -94,7 +109,7 @@ public static class TestProbes
         }
         finally
         {
-            pool.Free(); // BUG-002：未入树 Node 直接 Free，避免 64 个 Area2D RID 退出泄漏
+            pool.Free(); // BUG-002：未入树 Node 直接 Free，避免 64 个 Node 退出泄漏
         }
     }
 
@@ -278,7 +293,10 @@ public static class TestProbes
         {
             if (child is Bullet.Bullet b) { found = b; break; }
         }
-        holder.QueueFree();
+        // 探针隔离（2026-08-19）：必须立即 Free，不能 QueueFree——整批探针在同一帧跑完，
+        // QueueFree 要等帧末才生效，残留的全局名 "EnemyBullets" 层会被后续探针的 Enemy._Ready
+        // 误发现（Sniper/Sprayer 子弹 reparent 进去导致计数为 0），破坏探针独立性。
+        holder.Free();
         return found != null; // 子弹在世界层 = P0-1 已修复
     }
 
@@ -350,15 +368,351 @@ public static class TestProbes
         return ok;
     }
 
-    /// m1_enemy_contact：敌人接触伤害（BUG-012）——Enemy 的 CollisionMask 含玩家层（BodyEntered 可触发）。
+    /// m1_enemy_contact：敌人接触伤害（BUG-012 新契约，帧率优化专项）——去物理体后，
+    /// 接触由 Enemy.ContactPlayer() 驱动：派发 player_hit 事件（Main 收到后扣血/判死）并自身消失。
     private static bool ProbeM1EnemyContact()
     {
         var holder = new Node { Name = "ProbeEnemyContactHolder" };
         DevTestHub.I.AddChild(holder);
         var enemy = new Enemy.Enemy();
-        holder.AddChild(enemy); // _Ready → 设置 mask
-        bool ok = (enemy.CollisionMask & Bullet.CollisionLayers.Player) != 0;
+        holder.AddChild(enemy);
+
+        bool dispatched = false;
+        void Handler(string name, GodotObject? payload)
+        {
+            if (name == "player_hit") dispatched = true;
+        }
+        EventBus.I.World += Handler;
+        enemy.ContactPlayer();
+        EventBus.I.World -= Handler;
+
+        bool ok = Enemy.Enemy.Radius > 0f && dispatched; // 判定半径存在 + 接触能派发受击事件
         holder.QueueFree();
         return ok;
+    }
+
+    // ============ M2 割草爽感探针（2026-08-19 转玩法 WorkBuddy）============
+
+    /// 统计子树里可见的敌弹（对象池预分配弹 Visible=false，天然被排除；只数发射后真正在飞的）。
+    private static int CountVisibleEnemyBullets(Node root)
+    {
+        int n = 0;
+        foreach (Node c in root.GetChildren())
+        {
+            if (c is Bullet.Bullet b && b.Visible && !b.IsPlayerBullet) n++;
+            n += CountVisibleEnemyBullets(c);
+        }
+        return n;
+    }
+
+    /// 统计整棵场景树里可见的敌弹。用「发射前后差值」做断言：
+    /// 子弹不管挂到敌机子树还是 Main 的 EnemyBullets 世界层（前序探针 QueueFree 挂起中残留）都能数到；
+    /// 基线差也免疫同批次其它探针留下的孤儿弹。
+    private static int CountSceneEnemyBullets()
+        => CountVisibleEnemyBullets(DevTestHub.I.GetTree().Root);
+
+    /// m2_pickup：星之残片——进入吸收半径派发 pickup_absorbed（Main 收到后加经验）；默认经验=1、磁吸半径=基础值。
+    private static bool ProbeM2Pickup()
+    {
+        var holder = new Node { Name = "ProbeM2PickupHolder" };
+        DevTestHub.I.AddChild(holder);
+        var target = new Node2D { Name = "M2Target", Position = new Vector2(100, 100) };
+        holder.AddChild(target);
+
+        // 距 target 10px < AbsorbRadius(18)，首帧即吸收
+        var p = new Pickup.Pickup { Name = "M2Pickup", Position = new Vector2(100, 110) };
+        holder.AddChild(p);
+        p.SetTarget(target);
+
+        bool dispatched = false;
+        void Handler(string name, GodotObject? payload)
+        {
+            if (name == "pickup_absorbed" && payload is Pickup.Pickup) dispatched = true;
+        }
+        EventBus.I.World += Handler;
+        p._PhysicsProcess(0.1); // 进入吸收半径 → 派发 + QueueFree
+        EventBus.I.World -= Handler;
+
+        bool ok = dispatched && p.ExpValue == 1 && p.MagnetRadius == Pickup.Pickup.PickupMagnetBase;
+        holder.QueueFree();
+        return ok;
+    }
+
+    /// m2_exp：经验曲线纯函数 + AddExp 推进——Lv1 需 5 经验，之后每级 +4；未满不升、补满即升、可连升。
+    private static bool ProbeM2Exp()
+    {
+        if (Player.PlayerController.ExpToNextFor(1) != 5) return false;
+        if (Player.PlayerController.ExpToNextFor(2) != 9) return false;
+        if (Player.PlayerController.ExpToNextFor(3) != 13) return false;
+
+        var pc = new Player.PlayerController(); // 初始态（不进树即可测纯逻辑）
+        try
+        {
+            if (pc.Level != 1 || pc.Exp != 0 || pc.ExpToNext != 5) return false;
+
+            if (pc.AddExp(4) != 0 || pc.Level != 1 || pc.Exp != 4) return false; // 未满阈值不升级
+            if (pc.AddExp(1) != 1 || pc.Level != 2 || pc.Exp != 0 || pc.ExpToNext != 9) return false;
+            if (pc.AddExp(9) != 1 || pc.Level != 3 || pc.Exp != 0) return false; // 一次性补满 → 升 1 级
+            return true;
+        }
+        finally { pc.Free(); } // 未入树实例必须 Free，避免退出 RID 泄漏（对齐 ProbePool 纪律）
+    }
+
+    /// m2_upgrade：局内升级落地——穿透/引力/武器封顶/生命上限，均正确改变玩家属性（割草爽感来源）。
+    private static bool ProbeM2Upgrade()
+    {
+        var pc = new Player.PlayerController();
+        try
+        {
+            // 初始态
+            if (pc.Pierce || pc.MagnetRadius != Pickup.Pickup.PickupMagnetBase || pc.WeaponLevel != 1 || pc.MaxHp != 3) return false;
+
+            pc.ApplyUpgrade(UpgradeType.Pierce);
+            if (!pc.Pierce) return false;
+
+            pc.ApplyUpgrade(UpgradeType.Magnet);
+            float magnetAfter = Pickup.Pickup.PickupMagnetBase + Player.PlayerController.MagnetUpgradeBonus;
+            if (Mathf.Abs(pc.MagnetRadius - magnetAfter) > 0.01f) return false;
+
+            for (int i = 0; i < 4; i++) pc.ApplyUpgrade(UpgradeType.Weapon); // 连点应封顶
+            if (pc.WeaponLevel != Player.PlayerController.MaxWeaponLevel) return false;
+
+            pc.ApplyUpgrade(UpgradeType.MaxHp);
+            return pc.MaxHp == 4 && pc.Hp == 4; // 生命上限 +1 且回 1 血
+        }
+        finally { pc.Free(); } // 未入树实例必须 Free，避免退出 RID 泄漏（对齐 ProbePool 纪律）
+    }
+
+    /// m2_enemy_bomber：自爆怪——Bomber 配置加载（MoveSpeed=220 哨兵）+ 冲脸不射击 + 接触按爆炸半径触发受击。
+    private static bool ProbeM2EnemyBomber()
+    {
+        var holder = new Node { Name = "ProbeM2BomberHolder" };
+        DevTestHub.I.AddChild(holder);
+        var enemy = new Enemy.Enemy { Kind = Data.EnemyKind.Bomber };
+        holder.AddChild(enemy); // _Ready → 读 enemy_bomber.tres
+        var target = new Node2D { Name = "M2Target", Position = new Vector2(0, 300) };
+        holder.AddChild(target);
+        enemy.SetTarget(target);
+
+        // 哨兵（默认 MoveSpeed=0 → 未读配置会失败）：自爆怪高速 + 判定半径 = 爆炸半径
+        if (enemy.MoveSpeed != 220f) { holder.QueueFree(); return false; }
+        if (enemy.Kind != Data.EnemyKind.Bomber) { holder.QueueFree(); return false; }
+        if (enemy.ExplosionRadius <= 0f || enemy.ContactRadius != enemy.ExplosionRadius) { holder.QueueFree(); return false; }
+
+        // 自爆怪不射击：跑 2 秒不应有子弹（ShootInterval=0，UpdateBomber 无发射逻辑）
+        enemy._PhysicsProcess(2.0);
+        if (CountVisibleEnemyBullets(enemy) != 0) { holder.QueueFree(); return false; }
+
+        // 接触 → 派发 player_hit（自爆范围判定，Main 扣血）
+        bool hit = false;
+        void Handler(string name, GodotObject? payload) { if (name == "player_hit") hit = true; }
+        EventBus.I.World += Handler;
+        enemy.ContactPlayer();
+        EventBus.I.World -= Handler;
+
+        bool ok = hit;
+        holder.QueueFree();
+        return ok;
+    }
+
+    /// m2_enemy_sniper：狙击怪——Sniper 配置加载（LockTime=0.7 哨兵）+ 停靠→锁定→发射一枚高速瞄准弹。
+    private static bool ProbeM2EnemySniper()
+    {
+        var holder = new Node { Name = "ProbeM2SniperHolder" };
+        DevTestHub.I.AddChild(holder);
+        var enemy = new Enemy.Enemy { Kind = Data.EnemyKind.Sniper };
+        holder.AddChild(enemy); // _Ready → 读 enemy_sniper.tres
+        var target = new Node2D { Name = "M2Target", Position = new Vector2(0, 600) };
+        holder.AddChild(target);
+        enemy.SetTarget(target);
+
+        // 哨兵（默认 LockTime=0.6 / BulletSpeed=180 → 未读配置会失败）
+        if (enemy.LockTime != 0.7f || enemy.BulletSpeed != 320f) { holder.QueueFree(); return false; }
+
+        // 已低于停靠位（approachY = PlayfieldSize.Y*0.42；按实际战场高度计算，
+        // 兼容 headless 下 PlayfieldSize.Y≠720 的情况——敌机放在停靠位下方 → 首帧即转锁定态）
+        float approachY = (Autoload.GameManager.I?.PlayfieldSize.Y ?? 720f) * 0.42f;
+        enemy.Position = new Vector2(0, approachY + 50f);
+        enemy._PhysicsProcess(0.1);                       // Approach 帧（已在停靠位下方 → 转 Lock）
+        enemy._PhysicsProcess(enemy.LockTime + 0.1f);     // 锁定结束 → 发射
+        bool ok = CountVisibleEnemyBullets(enemy) == 1;  // 只发一发瞄准弹
+        holder.QueueFree();
+        return ok;
+    }
+
+    /// m2_enemy_sprayer：弹幕怪——Sprayer 配置加载（PatternCount=12 哨兵）+ 周期性环形弹幕 12 发。
+    private static bool ProbeM2EnemySprayer()
+    {
+        var holder = new Node { Name = "ProbeM2SprayerHolder" };
+        DevTestHub.I.AddChild(holder);
+        var enemy = new Enemy.Enemy { Kind = Data.EnemyKind.Sprayer };
+        holder.AddChild(enemy); // _Ready → 读 enemy_sprayer.tres
+        var target = new Node2D { Name = "M2Target", Position = new Vector2(0, 600) };
+        holder.AddChild(target);
+        enemy.SetTarget(target);
+
+        // 哨兵（默认 PatternCount=10 / MoveSpeed=0 = 不追人 → 未读配置会失败）
+        if (enemy.PatternCount != 12 || enemy.MoveSpeed != 0f) { holder.QueueFree(); return false; }
+
+        enemy._PhysicsProcess(enemy.ShootInterval + 0.2f); // 1.6s > ShootInterval(1.4) → 环形弹幕
+        bool ok = CountVisibleEnemyBullets(enemy) == 12;
+        holder.QueueFree();
+        return ok;
+    }
+
+    /// m2_waves：波次配置——5 波主题化：W1 纯 Chaser（教学），W5 全类型（爆发）；每波人数/类型池有效。
+    private static bool ProbeM2Waves()
+    {
+        var waves = Wave.WaveManager.Waves;
+        if (waves.Length != 5) return false;
+        foreach (var (count, kinds) in waves)
+        {
+            if (count <= 0 || kinds.Length == 0) return false;
+            foreach (var k in kinds)
+                if ((int)k < 0 || (int)k > 3) return false; // 类型必须合法
+        }
+        if (waves[0].kinds.Any(k => k != Data.EnemyKind.Chaser)) return false; // W1 教学：纯基础怪
+
+        bool hasChaser = false, hasBomber = false, hasSniper = false, hasSprayer = false;
+        foreach (var k in waves[4].kinds) // W5 爆发：全类型齐上
+        {
+            hasChaser |= k == Data.EnemyKind.Chaser;
+            hasBomber |= k == Data.EnemyKind.Bomber;
+            hasSniper |= k == Data.EnemyKind.Sniper;
+            hasSprayer |= k == Data.EnemyKind.Sprayer;
+        }
+        return hasChaser && hasBomber && hasSniper && hasSprayer;
+    }
+
+    /// m2_loop：M2 正循环纯逻辑闭环——EnemyKilled → 掉星 → Pickup 吸收 → XP → 升级 → 强化 → 武器态变化。
+    /// 击杀走真实 TakeDamage（派发 enemy_killed + DropExp>0 掉星条件）；掉落/吸收按 Main.SpawnFragment /
+    /// pickup_absorbed 同款接线模拟；吸收满 Lv1→Lv2 经验后 AddExp 返回升级数 → ApplyUpgrade(Weapon) →
+    /// ShotSpecs 弹道数增大（"弹幕可见变强"的纯逻辑证据）。
+    private static bool ProbeM2Loop()
+    {
+        var holder = new Node { Name = "ProbeM2LoopHolder" };
+        DevTestHub.I.AddChild(holder);
+
+        // 1) 击杀小怪（基础 Chaser）：能掉星（DropExp>0）+ enemy_killed 事件派发
+        var enemy = new Enemy.Enemy();
+        holder.AddChild(enemy);
+        if (enemy.DropExp <= 0) { holder.QueueFree(); return false; }
+        bool killed = false;
+        void KillHandler(string name, GodotObject? payload)
+        {
+            if (name == "enemy_killed" && ReferenceEquals(payload, enemy)) killed = true;
+        }
+        EventBus.I.World += KillHandler;
+        enemy.TakeDamage(999); // 击杀 → enemy_killed（Main 据此掉星）
+        EventBus.I.World -= KillHandler;
+        if (!killed) { holder.QueueFree(); return false; }
+
+        // 2) 玩家开局态（Lv1 / Exp0 / 武器1）
+        var pc = new Player.PlayerController();
+        holder.AddChild(pc);
+        pc.Position = new Vector2(0, 0);
+        int weaponBefore = pc.WeaponLevel;
+        if (weaponBefore != 1 || pc.Level != 1 || pc.Exp != 0) { holder.QueueFree(); return false; }
+
+        // 3) 按 Main 同款接线：生成足量星之残片（ExpValue=1）吸附吸收 → pickup_absorbed → AddExp
+        int ups = 0;
+        void AbsorbHandler(string name, GodotObject? payload)
+        {
+            if (name == "pickup_absorbed" && payload is Pickup.Pickup p)
+                ups += pc.AddExp(p.ExpValue); // Main.OnWorldEvent 同款
+        }
+        EventBus.I.World += AbsorbHandler;
+        int needToLevel = pc.ExpToNext; // Lv1 需 5 片
+        for (int i = 0; i < needToLevel; i++)
+        {
+            var p = new Pickup.Pickup { ExpValue = 1, Position = new Vector2(0, 5) };
+            holder.AddChild(p);
+            p.SetTarget(pc);
+            p._PhysicsProcess(0.1); // 距 pc 5px < AbsorbRadius(18) → 吸收派发
+        }
+        EventBus.I.World -= AbsorbHandler;
+        if (ups <= 0 || pc.Level != 2) { holder.QueueFree(); return false; } // 吸满 5 片 → Lv2
+
+        // 4) 升级 → 强化（Main.AutoUpgrade 的落地：自动加火力——应用武器强化）
+        pc.ApplyUpgrade(UpgradeType.Weapon);
+
+        // 5) 武器态变化：弹道数 1→2（"弹幕变了"的纯逻辑证据）
+        int shotsBefore = Player.PlayerController.ShotSpecs(Vector2.Zero, weaponBefore, 100f).Length;
+        int shotsAfter = Player.PlayerController.ShotSpecs(Vector2.Zero, pc.WeaponLevel, 100f).Length;
+        bool ok = pc.WeaponLevel == weaponBefore + 1 && shotsAfter == shotsBefore + 1;
+        holder.QueueFree();
+        return ok;
+    }
+
+    /// m2_powerup：道具系统——三种道具（护盾/生命/火力）进入吸收半径都派发 powerup_taken
+    /// （payload=自身，Main 收到后应用）；PlayerController.ApplyPowerup 即时增益落地：
+    /// 盾 +1 / 满血回血不超上限 / 火力武器 +1（非满级）。
+    private static bool ProbeM2Powerup()
+    {
+        var holder = new Node { Name = "ProbeM2PowerupHolder" };
+        DevTestHub.I.AddChild(holder);
+        var target = new Node2D { Name = "M2Target", Position = new Vector2(100, 100) };
+        holder.AddChild(target);
+
+        // 1) 三种道具距 target 10px < AbsorbRadius(18)，首帧吸收派发 powerup_taken
+        int taken = 0;
+        bool kindOk = true;
+        void Handler(string name, GodotObject? payload)
+        {
+            if (name == "powerup_taken" && payload is Pickup.Powerup pw)
+            {
+                taken++;
+                kindOk &= pw.Kind == Pickup.PowerupKind.Shield
+                          || pw.Kind == Pickup.PowerupKind.Life
+                          || pw.Kind == Pickup.PowerupKind.Fire;
+            }
+        }
+        EventBus.I.World += Handler;
+        foreach (var k in new[] { Pickup.PowerupKind.Shield, Pickup.PowerupKind.Life, Pickup.PowerupKind.Fire })
+        {
+            var p = new Pickup.Powerup { Kind = k, Position = new Vector2(100, 110) };
+            holder.AddChild(p);
+            p.SetTarget(target);
+            p._PhysicsProcess(0.1); // 吸收 → 派发 + QueueFree
+        }
+        EventBus.I.World -= Handler;
+        if (taken != 3 || !kindOk) { holder.QueueFree(); return false; }
+
+        // 2) ApplyPowerup 落地（未入树实例，默认 Hp=MaxHp=3 / 武器1 / 盾0）
+        var pc = new Player.PlayerController();
+        try
+        {
+            pc.ApplyPowerup(Pickup.PowerupKind.Shield);
+            if (pc.Shield != 1) return false;                 // 盾 +1
+            pc.ApplyPowerup(Pickup.PowerupKind.Life);
+            if (pc.Hp != pc.MaxHp) return false;              // 满血回血 = 不超上限
+            int wl = pc.WeaponLevel;
+            pc.ApplyPowerup(Pickup.PowerupKind.Fire);
+            return pc.WeaponLevel == wl + 1;                  // 火力：武器等级 +1
+        }
+        finally { pc.Free(); holder.QueueFree(); }
+    }
+
+    /// m2_touch：虚拟摇杆方向 → 移动动作映射（D-010 移动端基调）。
+    /// 验证 TouchControls.DirToActions 纯函数：零方向全松 / 正交单键 / 对角双键 / deadzone 内全松。
+    private static bool ProbeM2Touch()
+    {
+        var (l, r, u, d) = TouchControls.DirToActions(Vector2.Zero);
+        if (l || r || u || d) return false; // 零方向 → 全松
+
+        (l, r, u, d) = TouchControls.DirToActions(new Vector2(1f, 0f));
+        if (!r || l || u || d) return false; // 右推 → 仅 move_right
+
+        (l, r, u, d) = TouchControls.DirToActions(new Vector2(0f, -1f));
+        if (!u || l || r || d) return false; // 上推 → 仅 move_up
+
+        (l, r, u, d) = TouchControls.DirToActions(new Vector2(-0.5f, 0.5f));
+        if (!l || !d || r || u) return false; // 左下对角 → left + down
+
+        (l, r, u, d) = TouchControls.DirToActions(new Vector2(0.1f, 0f));
+        if (l || r || u || d) return false; // deadzone 内（0.2 阈值）→ 全松
+
+        (l, r, u, d) = TouchControls.DirToActions(new Vector2(0.5f, -0.5f).Normalized());
+        return r && u && !l && !d; // 右上对角（屏幕 Y 向下，-Y 为上；归一化后）→ right + up
     }
 }
