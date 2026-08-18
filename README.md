@@ -20,7 +20,7 @@
 # 2) 只构建 .NET 程序集
 .\tools\build.ps1
 
-# 3) headless 跑地基探针（自动化验证，5 个探针全过 = 地基健康）
+# 3) headless 跑地基探针（自动化验证，15 个探针全过 = 地基 + M1 手感健康）
 .\tools\run_tests.ps1
 
 # 4) 指定探针

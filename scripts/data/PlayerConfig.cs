@@ -14,4 +14,6 @@ public partial class PlayerConfig : Resource
     [Export] public float FocusSpeedRatio { get; set; } = 0.5f;
     [Export] public int MaxHp { get; set; } = 3;
     [Export] public int BombCount { get; set; } = 3;
+    [Export] public float FireInterval { get; set; } = 0.15f;
+    [Export] public float BulletSpeed { get; set; } = 520f;
 }

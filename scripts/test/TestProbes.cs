@@ -20,6 +20,16 @@ public static class TestProbes
         hub.RegisterProbe("pool", ProbePool);
         hub.RegisterProbe("pattern", ProbePattern);
         hub.RegisterProbe("enemy_config", ProbeEnemyConfig);
+        hub.RegisterProbe("weapon", ProbeWeapon);
+        hub.RegisterProbe("boss_config", ProbeBossConfig);
+        hub.RegisterProbe("score", ProbeScore);
+        // M1 手感（WorkBuddy 2026-08-19）：P0-2 判定 / 低速 / 无敌帧 / 自动射击 / 敌人移动 / P0-1 敌弹世界坐标
+        hub.RegisterProbe("m1_hitbox", ProbeM1Hitbox);
+        hub.RegisterProbe("m1_focus", ProbeM1Focus);
+        hub.RegisterProbe("m1_iframes", ProbeM1Iframes);
+        hub.RegisterProbe("m1_autofire", ProbeM1Autofire);
+        hub.RegisterProbe("m1_enemy_move", ProbeM1EnemyMove);
+        hub.RegisterProbe("m1_enemybullet_world", ProbeM1EnemyBulletWorld);
     }
 
     /// 启动自检：四个 autoload 单例均已就位，且拿到有效视口。
@@ -63,15 +73,22 @@ public static class TestProbes
     private static bool ProbePool()
     {
         var pool = new BulletPool(64);
-        var b1 = pool.Spawn();
-        var b2 = pool.Spawn();
-        if (pool.ActiveCount != 2 || pool.PooledCount != 62) return false;
+        try
+        {
+            var b1 = pool.Spawn();
+            var b2 = pool.Spawn();
+            if (pool.ActiveCount != 2 || pool.PooledCount != 62) return false;
 
-        pool.Release(b1);
-        if (pool.PooledCount != 63) return false;
+            pool.Release(b1);
+            if (pool.PooledCount != 63) return false;
 
-        var b3 = pool.Spawn();
-        return ReferenceEquals(b1, b3); // 对象池应复用 b1 的实例
+            var b3 = pool.Spawn();
+            return ReferenceEquals(b1, b3); // 对象池应复用 b1 的实例
+        }
+        finally
+        {
+            pool.Free(); // BUG-002：未入树 Node 直接 Free，避免 64 个 Area2D RID 退出泄漏
+        }
     }
 
     /// pattern 数学：aimed 长度=speed；spread 数量与间距正确；ring/spiral 数量与速率正确。
@@ -113,5 +130,145 @@ public static class TestProbes
                   && enemy.BulletSpeed == cfg.BulletSpeed;
         holder.QueueFree();
         return ok;
+    }
+
+    /// weapon：武器等级 → 射击弹数（1 单发 / 2 双发 / 3 三向）。纯函数可 headless。
+    private static bool ProbeWeapon()
+    {
+        if (Player.PlayerController.ShotSpecs(Vector2.Zero, 1, 100f).Length != 1) return false;
+        if (Player.PlayerController.ShotSpecs(Vector2.Zero, 2, 100f).Length != 2) return false;
+        if (Player.PlayerController.ShotSpecs(Vector2.Zero, 3, 100f).Length != 3) return false;
+        return true;
+    }
+
+    /// boss_config：Boss 从 BossConfig.tres 读取 HP / 弹速 / 圆环数（配置值 ≠ 代码默认，具备区分度）。
+    private static bool ProbeBossConfig()
+    {
+        var res = ResourceLoader.Load("res://data/BossConfig.tres", "", ResourceLoader.CacheMode.Ignore);
+        if (res is not Data.BossConfig cfg) return false;
+        if (cfg.MaxHp <= 0 || cfg.BulletSpeed <= 0f || cfg.RingCount <= 0) return false;
+
+        var holder = new Node { Name = "ProbeBossHolder" };
+        DevTestHub.I.AddChild(holder);
+        var boss = new Enemy.Boss();
+        holder.AddChild(boss); // 触发 _Ready → 从配置读取
+
+        bool ok = boss.MaxHp == cfg.MaxHp && boss.BulletSpeed == cfg.BulletSpeed;
+        holder.QueueFree();
+        return ok;
+    }
+
+    /// score：结算分数纯函数（击杀 ×100 + 波次奖励 + Boss 2000）。
+    private static bool ProbeScore()
+    {
+        return Score.ScoreCalc.Compute(10, 1500, true)
+               == 10 * Score.ScoreCalc.BasePerKill + 1500 + Score.ScoreCalc.BossBonus;
+    }
+
+    // ============ M1 手感探针（2026-08-19 WorkBuddy）============
+
+    /// m1_hitbox：P0-2 回归——自机实际判定 3px（视觉尺寸 ≠ Hitbox，弹幕游戏铁律）。
+    private static bool ProbeM1Hitbox()
+    {
+        return Player.PlayerController.HitboxRadius == 3f;
+    }
+
+    /// m1_focus：Shift 低速——FocusSpeedRatio 从 PlayerConfig.tres 正确读入，且必须是减速比（<1）。
+    private static bool ProbeM1Focus()
+    {
+        var res = ResourceLoader.Load("res://data/PlayerConfig.tres", "", ResourceLoader.CacheMode.Ignore);
+        if (res is not Data.PlayerConfig cfg) return false;
+        if (cfg.FocusSpeedRatio >= 1f) return false; // 低速比必须 <1，否则"低速"无意义
+
+        var holder = new Node { Name = "ProbeM1FocusHolder" };
+        DevTestHub.I.AddChild(holder);
+        var pc = new Player.PlayerController();
+        holder.AddChild(pc); // 触发 _Ready → 从配置读取
+        bool ok = pc.FocusSpeedRatio == cfg.FocusSpeedRatio;
+        holder.QueueFree();
+        return ok;
+    }
+
+    /// m1_iframes：受击 → 扣 1 血 + 进入无敌帧；无敌帧内重复受击被忽略；1.5s 后恢复可受击。
+    private static bool ProbeM1Iframes()
+    {
+        var holder = new Node { Name = "ProbeM1IframesHolder" };
+        DevTestHub.I.AddChild(holder);
+        var pc = new Player.PlayerController();
+        holder.AddChild(pc);
+
+        int hp0 = pc.Hp;
+        if (!pc.OnHit()) return false;        // 首次受击应消耗
+        if (pc.Hp != hp0 - 1) return false;   // 扣 1 血
+        if (pc.IsVulnerable()) return false;  // 受击后应进入无敌
+        if (pc.OnHit()) return false;         // 无敌帧内重复受击应被忽略
+        if (pc.Hp != hp0 - 1) return false;   // 血没有二次扣除
+
+        pc._Process(1.6f);                     // 推进超过 1.5s 无敌时长
+        bool ok = pc.IsVulnerable();           // 应恢复可受击
+        holder.QueueFree();
+        return ok;
+    }
+
+    /// m1_autofire：自动射击——TryFire 经发射器打出玩家弹（Lv1 单发，走对象池）。
+    private static bool ProbeM1Autofire()
+    {
+        var holder = new Node { Name = "ProbeM1AutofireHolder" };
+        DevTestHub.I.AddChild(holder);
+        var pc = new Player.PlayerController();
+        holder.AddChild(pc);
+        var emitter = new BulletEmitter { Name = "M1Emitter" };
+        holder.AddChild(emitter);
+        pc.BindEmitter(emitter);
+
+        pc.TryFire();
+        bool ok = emitter.Pool.ActiveCount == 1; // Lv1 单发
+        holder.QueueFree();
+        return ok;
+    }
+
+    /// m1_enemy_move：敌人 MoveSpeed>0 时朝目标缓移（数据驱动 EnemyConfig.tres；1 秒位移 ≈ MoveSpeed）。
+    private static bool ProbeM1EnemyMove()
+    {
+        var holder = new Node { Name = "ProbeM1EnemyMoveHolder" };
+        DevTestHub.I.AddChild(holder);
+        var enemy = new Enemy.Enemy();
+        holder.AddChild(enemy); // _Ready → 读配置
+        var target = new Node2D { Name = "M1Target", Position = new Vector2(0, 100) };
+        holder.AddChild(target);
+        enemy.SetTarget(target);
+        enemy.Position = new Vector2(0, 0);
+        if (enemy.MoveSpeed <= 0f) return false; // 配置必须开启移动
+
+        enemy._PhysicsProcess(1.0);
+        bool ok = Mathf.Abs(enemy.Position.Y - enemy.MoveSpeed) < 0.5f; // 1 秒朝 target 移 MoveSpeed px
+        holder.QueueFree();
+        return ok;
+    }
+
+    /// m1_enemybullet_world：P0-1 回归——敌弹生成后挂在 "EnemyBullets" 世界层，不在 Enemy 子树
+    /// （敌人移动/死亡不带动弹幕；子弹进入世界坐标体系，为 Boss 弹幕打基础）。
+    private static bool ProbeM1EnemyBulletWorld()
+    {
+        var holder = new Node { Name = "ProbeM1EnemyBulletWorldHolder" };
+        DevTestHub.I.AddChild(holder);
+        var worldLayer = new Node2D { Name = "EnemyBullets", Position = Vector2.Zero };
+        holder.AddChild(worldLayer);
+
+        var enemy = new Enemy.Enemy();
+        holder.AddChild(enemy); // _Ready → 自动查找并注入 worldLayer
+        enemy.SetTarget(worldLayer); // 发射条件：target 非 null
+        enemy.Position = new Vector2(300, 200);
+
+        // 推进超过 ShootInterval，触发一次发射
+        enemy._PhysicsProcess(enemy.ShootInterval + 0.1);
+
+        Bullet.Bullet? found = null;
+        foreach (var child in worldLayer.GetChildren())
+        {
+            if (child is Bullet.Bullet b) { found = b; break; }
+        }
+        holder.QueueFree();
+        return found != null; // 子弹在世界层 = P0-1 已修复
     }
 }

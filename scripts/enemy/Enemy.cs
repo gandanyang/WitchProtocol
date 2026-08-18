@@ -5,26 +5,28 @@ using MagicThunder.Bullet;
 namespace MagicThunder.Enemy;
 
 /// <summary>
-/// 最小敌人（MVP 占位）：周期性朝玩家方向吐弹，可被玩家弹击倒。
-/// 数值来自 data/EnemyConfig.tres（数据驱动；配置加载失败回退默认值，不阻断运行）。
+/// 小怪（MVP 垂直切片）：数值来自 data/EnemyConfig.tres（数据驱动；加载失败回退默认值，不阻断运行）。
+/// 行为：MoveSpeed 朝玩家缓移 + 周期性 Aimed 吐弹；被击闪白；击杀加分并派发 enemy_killed（payload=自身）。
 /// 命中判定由玩家弹脚本驱动（见 Bullet.OnAreaEntered）。
-/// 移动 AI（MoveSpeed）在垂直切片阶段接入。
 /// </summary>
 public partial class Enemy : Area2D
 {
     private const string DefaultConfigPath = "res://data/EnemyConfig.tres";
     private const float RadiusPx = 16f;
+    private const float HitFlashDuration = 0.08f;
 
     public int MaxHp { get; private set; } = 3;
     public float MoveSpeed { get; private set; } = 0f;
     public float ShootInterval { get; private set; } = 1.2f;
     public float BulletSpeed { get; private set; } = 180f;
     public float ContactDamage { get; private set; } = 1f;
+    public int KillScore { get; private set; } = 100;
 
     private int _hp;
     private Node2D? _target;
     private readonly BulletEmitter _emitter = new();
     private float _shootTimer;
+    private float _flashTimer;
 
     public override void _Ready()
     {
@@ -43,28 +45,52 @@ public partial class Enemy : Area2D
         CollisionMask = 0;  // 自身不主动检测（受击由玩家弹脚本处理）
         AddChild(new CollisionShape2D { Shape = new CircleShape2D { Radius = RadiusPx } });
         AddChild(_emitter);
+
+        // P0-1（敌弹世界坐标）：查找 Main 装配的战场弹幕层 "EnemyBullets"（挂战场原点），
+        // 注入后敌弹 reparent 到世界层，不随 Enemy 移动/死亡。找不到则回退（弹幕挂本节点下）。
+        if (GetTree().Root.FindChild("EnemyBullets", true, false) is Node2D worldLayer)
+            _emitter.WorldLayer = worldLayer;
+
         _hp = MaxHp;
-        QueueRedraw(); // 占位外观，正式美术接入后移除 _Draw
+        QueueRedraw();
     }
 
-    public override void _Draw() => DrawCircle(Vector2.Zero, RadiusPx, Colors.Firebrick);
+    public override void _Draw()
+    {
+        // 受击闪白（HitFlash）给玩家命中反馈
+        DrawCircle(Vector2.Zero, RadiusPx, _flashTimer > 0f ? Colors.White : Colors.Firebrick);
+    }
 
-    public void SetTarget(Node2D target) => _target = target;
+    public void SetTarget(Node2D? target) => _target = target;
 
-    /// 被玩家弹命中（由玩家弹脚本调用）。归零则阵亡并通知 Main 结算。
+    /// 被玩家弹命中（由玩家弹脚本调用）。归零则阵亡并通知结算（payload=自身，携带 KillScore）。
     public void TakeDamage(int damage)
     {
         _hp -= damage;
+        _flashTimer = HitFlashDuration;
+        QueueRedraw();
         if (_hp <= 0)
         {
-            EventBus.I.Dispatch("enemy_killed");
+            EventBus.I.Dispatch("enemy_killed", this);
             QueueFree();
         }
     }
 
     public override void _PhysicsProcess(double delta)
     {
-        _shootTimer -= (float)delta;
+        float dt = (float)delta;
+
+        if (_flashTimer > 0f)
+        {
+            _flashTimer -= dt;
+            QueueRedraw();
+        }
+
+        // 移动：MoveSpeed > 0 时朝玩家缓移（数据驱动，改 EnemyConfig.tres 生效）
+        if (MoveSpeed > 0f && _target != null)
+            Position += (_target.Position - Position).Normalized() * MoveSpeed * dt;
+
+        _shootTimer -= dt;
         if (_shootTimer <= 0f && _target != null && IsInsideTree())
         {
             _shootTimer = ShootInterval;

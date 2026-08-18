@@ -6,6 +6,7 @@ namespace MagicThunder.Bullet;
 /// 子弹本体。由 <see cref="BulletPool"/> 统一分配/回收（弹幕瓶颈在架构，禁止随处 new/QueueFree）。
 /// 命中检测用事件信号（area_entered/body_entered），不是每帧查询；层/掩码由发射器 Configure 统一设置。
 /// 命中后通过 <see cref="Recycle"/> 回收到所属对象池（保住池内复用，不破坏 _active 列表）。
+/// 视觉：玩家弹用星辉魔弹贴图（去黑 shader），敌弹保持占位圆（M1 灰盒）。
 /// </summary>
 public partial class Bullet : Area2D
 {
@@ -24,6 +25,12 @@ public partial class Bullet : Area2D
     private const uint LayerPlayerBullet = 3;
     private const uint LayerEnemyBullet = 4;
 
+    private const string BulletStarTexture = "res://assets/bullets/bullet_star.png";
+    private const string RemoveDarkShader = "res://assets/shaders/remove_dark.gdshader";
+    private const float BulletSpriteScale = 0.05f; // 1024px 星弹 → ~50px 视觉
+
+    private Sprite2D? _sprite;
+
     public override void _Ready()
     {
         AddChild(new CollisionShape2D { Shape = new CircleShape2D { Radius = RadiusPx } });
@@ -33,6 +40,7 @@ public partial class Bullet : Area2D
 
     public override void _Draw()
     {
+        if (IsPlayerBullet && _sprite != null) return; // 玩家弹有贴图，不画占位圆
         DrawCircle(Vector2.Zero, RadiusPx, Colors.White);
     }
 
@@ -43,18 +51,43 @@ public partial class Bullet : Area2D
         Damage = damage;
         IsPlayerBullet = isPlayerBullet;
         // 碰撞层：玩家弹只打敌人(层2)；敌弹只打玩家 body(层1)。
-        // 在 Configure 统一设置（_Ready 时 IsPlayerBullet 尚未就位）。
         CollisionLayer = isPlayerBullet ? LayerPlayerBullet : LayerEnemyBullet;
         CollisionMask = isPlayerBullet ? LayerEnemy : LayerPlayer;
+        ApplyVisual();
+        QueueRedraw();
     }
 
-    /// 回收复用前复位到初始态（避免残留旧帧速度/伤害/归属）。
+    private void ApplyVisual()
+    {
+        if (IsPlayerBullet)
+        {
+            if (_sprite == null)
+            {
+                var tex = ResourceLoader.Load<Texture2D>(BulletStarTexture, "", ResourceLoader.CacheMode.Ignore);
+                var shader = ResourceLoader.Load<Shader>(RemoveDarkShader, "", ResourceLoader.CacheMode.Ignore);
+                if (tex != null && shader != null)
+                {
+                    _sprite = new Sprite2D { Texture = tex, Scale = Vector2.One * BulletSpriteScale };
+                    _sprite.Material = new ShaderMaterial { Shader = shader };
+                    AddChild(_sprite);
+                }
+            }
+            if (_sprite != null) _sprite.Visible = true;
+        }
+        else if (_sprite != null)
+        {
+            _sprite.Visible = false; // 敌弹保持占位圆
+        }
+    }
+
+    /// 回收复用前复位到初始态（避免残留旧帧速度/伤害/归属/贴图）。
     public void Reset()
     {
         Velocity = Vector2.Zero;
         Damage = 1;
         IsPlayerBullet = false;
         Position = Vector2.Zero;
+        if (_sprite != null) _sprite.Visible = false;
     }
 
     public override void _PhysicsProcess(double delta)
@@ -65,18 +98,25 @@ public partial class Bullet : Area2D
     private void OnAreaEntered(Area2D other)
     {
         if (!IsPlayerBullet) return; // 敌弹不打敌人
-        if (other is Enemy.Enemy e)
+        switch (other)
         {
-            e.TakeDamage(Damage);
-            RecycleSelf();
+            case Enemy.Enemy e:
+                e.TakeDamage(Damage);
+                RecycleSelf();
+                break;
+            case Enemy.Boss b:
+                b.TakeDamage(Damage);
+                RecycleSelf();
+                break;
         }
     }
 
     private void OnBodyEntered(Node2D body)
     {
         if (IsPlayerBullet) return; // 玩家弹不打玩家
-        if (body is Player.PlayerController)
+        if (body is Player.PlayerController pc)
         {
+            if (!pc.IsVulnerable()) return; // 无敌帧内敌弹穿过
             Autoload.EventBus.I.Dispatch("player_hit");
             RecycleSelf();
         }

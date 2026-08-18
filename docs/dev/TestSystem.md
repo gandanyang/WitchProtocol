@@ -16,14 +16,14 @@
 ## 二、如何运行
 
 ```powershell
-.\tools\run_tests.ps1                  # 6 个默认探针：boot,event,save,pool,pattern,enemy_config
+.\tools\run_tests.ps1                  # 15 个默认探针：boot,event,save,pool,pattern,enemy_config,weapon,boss_config,score,m1_hitbox,m1_focus,m1_iframes,m1_autofire,m1_enemy_move,m1_enemybullet_world
 .\tools\run_tests.ps1 boot,pool        # 只跑指定探针
 ```
 
 等价命令（不含构建）：
 
 ```bash
-godot --headless --path . res://tests/TestSuite.tscn -- --probes=boot,event,save,pool,pattern
+godot --headless --path . res://tests/TestSuite.tscn -- --probes=boot,event,save,pool,pattern,enemy_config,weapon,boss_config,score,m1_hitbox,m1_focus,m1_iframes,m1_autofire,m1_enemy_move,m1_enemybullet_world
 ```
 
 输出报告：`user://test_reports/latest.txt`（沙箱下在 `.godot/userhome/magicThunder/test_reports/latest.txt`，不入库）。
@@ -38,6 +38,9 @@ godot --headless --path . res://tests/TestSuite.tscn -- --probes=boot,event,save
 | `pool` | 对象池 spawn/release 数量守恒 + 复用 | 同上 |
 | `pattern` | aimed/spread/ring/spiral 数学正确 | 同上 |
 | `enemy_config` | Enemy 从 EnemyConfig.tres 读取 HP / 射击间隔 / 子弹速度 | `scripts/test/TestProbes.cs` |
+| `weapon` | 武器等级 → 弹数（1 单发 / 2 双发 / 3 三向）纯函数 | 同上 |
+| `boss_config` | Boss 从 BossConfig.tres 读取 HP / 弹速 / 圆环数 | 同上 |
+| `score` | 结算分数纯函数（击杀×100 + 波次奖励 + Boss 2000） | 同上 |
 
 ## 四、编写新探针的范式
 
@@ -65,7 +68,7 @@ hub.RegisterProbe("myfeature", ProbeMyFeature);
 
 ## 五、测试纪律（硬性）
 
-1. **改动核心系统后必须跑探针**：改 autoload / 对象池 / Pattern / SaveSystem → 跑 `run_tests.ps1`，5 探针必须全绿再收工。
+1. **改动核心系统后必须跑探针**：改 autoload / 对象池 / Pattern / SaveSystem / 武器 / Boss / 分数 → 跑 `run_tests.ps1`，9 探针必须全绿再收工。
 2. **发布构建隔离**：DevTestHub 探针仅在 headless + 显式 `--probes` 参数时执行，天然不进正式流程。新增测试入口必须保持同等级隔离（见 `AI_GUARDRAIL.md`）。
 3. **种子必须还原**：任何测试种子结束要把状态 Reset 归位，不留脏存档。
 4. **沙箱兼容**：写 `user://` 的测试请通过 `run_tests.ps1` 运行（已重定向 APPDATA），不要手动裸跑导致沙箱拦截。

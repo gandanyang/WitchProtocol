@@ -4,7 +4,9 @@
 
 [resource]
 script = ExtResource("1")
-move_speed = 320.0
-focus_speed_ratio = 0.5
-max_hp = 3
-bomb_count = 3
+MoveSpeed = 320.0
+FocusSpeedRatio = 0.5
+MaxHp = 3
+BombCount = 3
+FireInterval = 0.15
+BulletSpeed = 520.0

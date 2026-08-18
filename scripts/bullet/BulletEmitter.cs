@@ -10,6 +10,14 @@ public partial class BulletEmitter : Node
 {
     public BulletPool Pool { get; } = new BulletPool(512);
 
+    /// <summary>
+    /// P0-1（敌弹世界坐标）：战场弹幕层（Main 装配的 "EnemyBullets" 节点，挂战场原点）。
+    /// 设置后，Emit 出的子弹会 reparent 到此层——脱离发射器所在子树（如 Enemy 子节点），
+    /// 敌人移动/死亡不再带动弹幕；层在原点时 LocalPosition ≈ 世界坐标。
+    /// 未设置时回退旧行为（子弹挂发射器子树下），保证探针/独立场景安全。
+    /// </summary>
+    public Node2D? WorldLayer { get; set; }
+
     public override void _Ready()
     {
         AddChild(Pool);
@@ -29,7 +37,14 @@ public partial class BulletEmitter : Node
         foreach (var v in velocities)
         {
             var b = Pool.Spawn();
-            b.Position = spec.From;
+            // P0-1：若配置了世界层，子弹脱离发射器子树。
+            // 注意 Godot 的 AddChild 不自动 reparent——先摘除旧父节点，再挂世界层。
+            if (WorldLayer != null && b.GetParent() != WorldLayer)
+            {
+                b.GetParent()?.RemoveChild(b);
+                WorldLayer.AddChild(b);
+            }
+            b.Position = spec.From; // 世界层挂战场原点 → LocalPosition ≈ 世界坐标
             b.Configure(v, spec.Damage, spec.IsPlayerBullet);
             b.Recycle = Pool.Release; // 命中/出屏后回收到本发射器的池，保住对象池复用
         }
