@@ -16,8 +16,9 @@ from PIL import Image, ImageChops
 SRC = "G:/magicThunder/assets/characters/rika/battlesprite/rika_battlesprite.png"
 DST = "G:/magicThunder/assets/characters/rika/battlesprite/rika_battlesprite_ready.png"
 OUT_SIZE = 256
-# 白键阈值：距白 < KEY_SOFT 全透明；KEY_SOFT~KEY_HARD 线性羽化；> KEY_HARD 不透明
-KEY_SOFT, KEY_HARD = 40, 90
+# 白键阈值：距白 < KEY_SOFT 全透明；KEY_SOFT~KEY_HARD 线性羽化；> KEY_HARD 不透明。
+# 浅色头发/高光保留：KEY_SOFT 不能太高（会把浅色头发当成背景透明化），典型 20/60。
+KEY_SOFT, KEY_HARD = 20, 60
 
 
 def make_alpha(rgb_img):

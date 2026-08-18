@@ -32,15 +32,14 @@ JOBS = [
                  "surrounded by a huge glowing star magic circle and floating star fragments, starry night sky "
                  "with a distant rift, dark fantasy, gothic, magical girl, anime cinematic, glowing magic circle, "
                  "beautiful girl, high quality illustration, game character design, full body portrait")),
-    # ---- S 级：黎歌战斗 sprite（黑底去底用；修订 v3：改"wizard robe + floor-length"约束）----
+    # ---- S 级：黎歌战斗 sprite（俯视背部视角——STG 自机标准，参考《爆裂魔女》；白底供 prep_sprite 去底）----
     dict(name="rika_battlesprite", w=1024, h=1024, dir="characters/rika/battlesprite",
-         prompt=("full body character sprite of a young magical girl with long silver-purple hair and starry "
-                 "violet eyes, wearing a long black wizard robe with silver star patterns that reaches her ankles, "
-                 "the hem touching the ground, her legs fully covered by fabric, three-quarter view, holding "
-                 "a small glowing star wand at her side, plain solid black background, clean flat anime style, "
-                 "anime magical girl, dark fantasy priestess, full body coverage from neck to ankles, no exposed legs, "
-                 "no short skirt, no bare skin below the waist, no thigh-highs, no garter, no corset, no strap shoes, "
-                 "long black robes, floor-length hem, game character sprite asset")),
+         prompt=("game character top-down flying sprite, a young magical girl with long silver-purple hair seen "
+                 "from behind and slightly above, flying toward the top of the screen, her back facing the camera, "
+                 "black gothic witch dress with star patterns flowing in the wind, hair streaming upward, no face "
+                 "visible, back of head and shoulders, arms slightly extended, dynamic aerial flight pose, "
+                 "plain solid white background, clean flat anime style, clear silhouette, small player ship "
+                 "character sprite, STG bullet hell player sprite, top-down perspective, game sprite asset")),
     # ---- S 级：玩家子弹（弹幕可读性）----
     dict(name="bullet_star", w=1024, h=1024, dir="bullets",
          prompt=("game bullet texture, a single glowing star projectile with a bright white core and violet-cyan "
