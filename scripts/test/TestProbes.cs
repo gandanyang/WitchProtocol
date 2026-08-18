@@ -30,6 +30,10 @@ public static class TestProbes
         hub.RegisterProbe("m1_autofire", ProbeM1Autofire);
         hub.RegisterProbe("m1_enemy_move", ProbeM1EnemyMove);
         hub.RegisterProbe("m1_enemybullet_world", ProbeM1EnemyBulletWorld);
+        // M1 反馈层（2026-08-19 二轮）：音效资产 / 全局反馈相机 / 战败坠落状态
+        hub.RegisterProbe("sfx", ProbeSfx);
+        hub.RegisterProbe("feedback", ProbeFeedback);
+        hub.RegisterProbe("deathfall", ProbeDeathFall);
     }
 
     /// 启动自检：四个 autoload 单例均已就位，且拿到有效视口。
@@ -270,5 +274,41 @@ public static class TestProbes
         }
         holder.QueueFree();
         return found != null; // 子弹在世界层 = P0-1 已修复
+    }
+
+    // ============ M1 反馈层探针（2026-08-19 二轮 WorkBuddy）============
+
+    /// sfx：程序化音效资产完整性（tools/gen_sfx.py 产出的 5 个 wav 全部可加载）。
+    private static bool ProbeSfx()
+    {
+        return Audio.SfxPlayer.ProbeAssets();
+    }
+
+    /// feedback：全局反馈系统——BattleCamera 挂到 GameManager 下并居中战场。
+    private static bool ProbeFeedback()
+    {
+        if (GameManager.I == null) return false;
+        if (!Effects.FeedbackSystem.Ensure()) return false;
+        var cam = Effects.FeedbackSystem.Camera;
+        return cam != null && cam.Position == GameManager.I.PlayfieldSize / 2f && cam.Zoom == Vector2.One;
+    }
+
+    /// deathfall：战败坠落——EnterDeathFall 进入坠落态，ApplyDeathFall 推进位置下降（演出可用）。
+    private static bool ProbeDeathFall()
+    {
+        var holder = new Node { Name = "ProbeDeathFallHolder" };
+        DevTestHub.I.AddChild(holder);
+        var pc = new Player.PlayerController();
+        holder.AddChild(pc);
+        pc.Position = new Vector2(100, 100);
+
+        pc.EnterDeathFall();
+        if (!pc.IsDying) { holder.QueueFree(); return false; }
+
+        float y0 = pc.Position.Y;
+        for (int i = 0; i < 30; i++) pc.ApplyDeathFall(0.1f); // 模拟 3 秒坠落
+        bool ok = pc.Position.Y > y0 + 20f; // 垂直下坠明显
+        holder.QueueFree();
+        return ok;
     }
 }

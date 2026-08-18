@@ -1,5 +1,7 @@
 using Godot;
+using MagicThunder.Audio;
 using MagicThunder.Bullet;
+using MagicThunder.Effects;
 
 namespace MagicThunder.Player;
 
@@ -21,7 +23,8 @@ public partial class PlayerController : CharacterBody2D
 {
     private const string DefaultConfigPath = "res://data/PlayerConfig.tres";
     private const string BattleSpritePath = "res://assets/characters/rika/battlesprite/rika_battlesprite.png";
-    private const string RemoveDarkShader = "res://assets/shaders/remove_dark.gdshader";
+    // 玩家立绘是白底素材，去白底 shader（remove_dark 只去黑底，对白底无效）。
+    private const string RemoveWhiteShader = "res://assets/shaders/remove_white.gdshader";
 
     /// 武器等级上限（单发→双发→三向），满级后结算不再出现武器强化。
     public const int MaxWeaponLevel = 3;
@@ -46,11 +49,28 @@ public partial class PlayerController : CharacterBody2D
     private const float BoundaryMargin = 24f;
     private const float BattleSpriteScale = 0.08f; // 1024px 全身图 → ~82px 自机
 
+    // ---- 手感（M1 调优）：加速/减速，快起快停，消除"瞬移"僵硬感 ----
+    /// 移动加速度（px/s²）：输入方向时向目标速度靠拢的速率。
+    private const float MoveAccel = 2600f;
+    /// 移动减速度（px/s²）：松开输入时的停止速率（略大于加速，停止更干脆）。
+    private const float MoveDecel = 3200f;
+    /// 无敌帧闪烁周期（秒）：0.1s 一明一暗，比逐帧切换更清晰可读。
+    private const float BlinkPeriod = 0.1f;
+    /// 受击瞬间白闪时长（秒）：受击第一帧闪白，强化打击反馈。
+    private const float HitFlashTime = 0.08f;
+    /// 护盾环视觉半径（px）：Shield>0 时绘制。
+    private const float ShieldRingRadius = 15f;
+
     private BulletEmitter? _emitter;
     private float _fireTimer;
     private float _invincibleTimer;
+    private float _blinkTimer;
     private bool _blinkOn;
     private bool _hasSprite;
+    private float _hitFlashTimer;
+
+    // ---- 战败坠落状态（供 DeathSequence 驱动；死亡演出 = 灵魂，见 M4-1）----
+    private Vector2 _fallVelocity;
 
     /// 武器等级：1 单发 / 2 双发 / 3 三向（本关结束结算升级，跨关保留）。
     public int WeaponLevel { get; private set; } = 1;
@@ -61,6 +81,8 @@ public partial class PlayerController : CharacterBody2D
     /// 护盾层数：抵挡一次伤害，不扣生命（结算升级获得，跨关保留）。
     public int Shield { get; private set; }
     public bool IsDead => Hp <= 0;
+    /// 是否处于战败坠落状态（死亡演出中，不响应输入/射击）。
+    public bool IsDying { get; private set; }
 
     public override void _Ready()
     {
@@ -76,7 +98,9 @@ public partial class PlayerController : CharacterBody2D
         }
         Hp = MaxHp;
 
-        // 碰撞体：供敌弹 body_entered 命中检测（敌弹 mask=层1 → 命中本体会触发）
+        // 碰撞体：供敌弹 body_entered 命中检测（敌弹 mask=玩家层 → 命中本体会触发）
+        CollisionLayer = CollisionLayers.Player; // 协议见 CollisionLayers，显式声明防散落
+        CollisionMask = 0; // 玩家不主动检测
         AddChild(new CollisionShape2D { Shape = new CircleShape2D { Radius = HitboxRadius } });
 
         TryAttachBattleSprite();
@@ -85,20 +109,41 @@ public partial class PlayerController : CharacterBody2D
 
     private void TryAttachBattleSprite()
     {
-        var tex = ResourceLoader.Load<Texture2D>(BattleSpritePath, "", ResourceLoader.CacheMode.Ignore);
-        var shader = ResourceLoader.Load<Shader>(RemoveDarkShader, "", ResourceLoader.CacheMode.Ignore);
-        if (tex == null || shader == null) return;
+        // 默认资源缓存（不再 CacheMode.Ignore）：纹理/材质全局共享一份，降低内存与卡顿。
+        var tex = ResourceLoader.Load<Texture2D>(BattleSpritePath);
+        if (tex == null) return;
         var sprite = new Sprite2D { Texture = tex, Scale = Vector2.One * BattleSpriteScale };
-        sprite.Material = new ShaderMaterial { Shader = shader };
+        sprite.Material = SharedBattleMaterial(); // 去白底材质静态共享，避免每节点 new
         AddChild(sprite);
         _hasSprite = true;
+    }
+
+    /// 去白底材质（静态共享）：所有玩家实例共用一份 ShaderMaterial，减少材质实例与 GPU 切换。
+    private static ShaderMaterial? _battleMat;
+    private static ShaderMaterial? SharedBattleMaterial()
+    {
+        if (_battleMat == null)
+        {
+            var shader = ResourceLoader.Load<Shader>(RemoveWhiteShader);
+            if (shader != null) _battleMat = new ShaderMaterial { Shader = shader };
+        }
+        return _battleMat;
     }
 
     public override void _Draw()
     {
         // 占位外观（sprite 加载失败时）
         if (!_hasSprite) DrawRect(new Rect2(-8, -12, 16, 24), Colors.CornflowerBlue);
+        DrawShieldRing();
         DrawHitboxMarker();
+    }
+
+    /// 护盾环：Shield>0 时画一圈蓝紫光环（视觉提示"还有一次抵挡"）。
+    private void DrawShieldRing()
+    {
+        if (Shield <= 0) return;
+        var c = new Color(0.45f, 0.6f, 1f, 0.55f);
+        DrawArc(Vector2.Zero, ShieldRingRadius, 0f, Mathf.Tau, 32, c, 2f);
     }
 
     /// 判定点标记：低速聚焦时放大高亮，平时淡色小点（P0-2 可读性）。
@@ -124,6 +169,13 @@ public partial class PlayerController : CharacterBody2D
         if (Shield > 0) Shield--;
         else Hp--;
         _invincibleTimer = InvincibleTime;
+        _hitFlashTimer = HitFlashTime; // 受击瞬间白闪
+        QueueRedraw(); // 护盾环可能变化
+
+        // 受击反馈（M1 手感核心）：震屏 + HitStop 顿帧 + 音效
+        FeedbackSystem.ShakeScreen(0.25f, 6f);
+        FeedbackSystem.HitStop(0.06f);
+        SfxPlayer.Play("player_hit");
         return true;
     }
 
@@ -134,6 +186,11 @@ public partial class PlayerController : CharacterBody2D
         Hp = MaxHp;
         _invincibleTimer = 0f;
         _blinkOn = false;
+        _blinkTimer = 0f;
+        _hitFlashTimer = 0f;
+        IsDying = false;
+        _fallVelocity = Vector2.Zero;
+        Rotation = 0f;
         Modulate = Colors.White;
         _fireTimer = 0f;
     }
@@ -202,15 +259,47 @@ public partial class PlayerController : CharacterBody2D
             _fireTimer = FireInterval;
             foreach (var spec in ShotSpecs(GlobalPosition, WeaponLevel, BulletSpeed))
                 _emitter.Emit(spec);
+            SfxPlayer.Play("shot", -12f); // 射击音效：音量低（0.15s 射速下不吵）
         }
+    }
+
+    /// 进入战败坠落（死亡演出）：由 DeathSequence 驱动，停止输入/射击。
+    /// 正常（未暂停）流程下 _PhysicsProcess 也会自行推进，保证两种路径都生效。
+    public void EnterDeathFall()
+    {
+        IsDying = true;
+        _fallVelocity = Vector2.Zero;
+        _invincibleTimer = 0f;
+    }
+
+    /// 坠落推进（每秒调用一次，dt=秒）：速度衰减 + 缓降 + 自旋。供 DeathSequence 每帧调用。
+    public void ApplyDeathFall(float dt)
+    {
+        if (!IsDying) IsDying = true;
+        // 水平速度快速衰减（失去控制），垂直缓慢加速下坠（失重感）
+        _fallVelocity = _fallVelocity * 0.92f + new Vector2(0f, 55f) * dt;
+        Position += _fallVelocity * dt;
+        Rotation += 0.9f * dt;
     }
 
     public override void _PhysicsProcess(double delta)
     {
-        // 移动（8 方向）
+        float dt = (float)delta;
+
+        // 战败坠落：不响应输入/射击，由 ApplyDeathFall 推进（DeathSequence 或本帧循环）
+        if (IsDying)
+        {
+            ApplyDeathFall(dt);
+            MoveAndSlide();
+            return;
+        }
+
+        // 移动（8 方向 + 加速/减速）：快起快停，消除速度突变僵硬感
         var input = Input.GetVector("move_left", "move_right", "move_up", "move_down");
         var ratio = Input.IsActionPressed("focus") ? FocusSpeedRatio : 1f;
-        Velocity = input * MoveSpeed * ratio;
+        var targetVel = input * MoveSpeed * ratio;
+        float accel = input.LengthSquared() > 0f ? MoveAccel : MoveDecel;
+        Velocity = Velocity.MoveToward(targetVel, accel * dt);
         MoveAndSlide();
 
         // 边界限制（PlayfieldSize 内留边距）
@@ -220,18 +309,35 @@ public partial class PlayerController : CharacterBody2D
             Mathf.Clamp(Position.Y, BoundaryMargin, size.Y - BoundaryMargin));
 
         // 自动射击（星辉魔弹，无需按键）
-        _fireTimer -= (float)delta;
+        _fireTimer -= dt;
         TryFire();
     }
 
     public override void _Process(double delta)
     {
-        // 无敌帧：计时 + 闪烁
+        float dt = (float)delta;
+
+        // 受击白闪（短暂，先于无敌闪烁显示）
+        if (_hitFlashTimer > 0f)
+        {
+            _hitFlashTimer -= dt;
+            if (_hitFlashTimer <= 0f) QueueRedraw();
+        }
+
+        // 无敌帧：计时 + 高频闪烁（0.1s 周期，alpha 0.25 更明显）
         if (_invincibleTimer > 0f)
         {
-            _invincibleTimer -= (float)delta;
-            _blinkOn = !_blinkOn;
-            Modulate = _blinkOn ? new Color(1f, 1f, 1f, 0.35f) : new Color(1f, 1f, 1f, 1f);
+            _invincibleTimer -= dt;
+            _blinkTimer -= dt;
+            if (_blinkTimer <= 0f)
+            {
+                _blinkTimer = BlinkPeriod;
+                _blinkOn = !_blinkOn;
+            }
+            if (_hitFlashTimer > 0f)
+                Modulate = new Color(1f, 1f, 1f, 1f); // 白闪期不降透明
+            else
+                Modulate = _blinkOn ? new Color(1f, 1f, 1f, 0.25f) : new Color(1f, 1f, 1f, 1f);
             if (_invincibleTimer <= 0f) Modulate = Colors.White;
         }
     }

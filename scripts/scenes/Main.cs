@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
+using MagicThunder.Audio;
 using MagicThunder.Autoload;
 using MagicThunder.Bullet;
+using MagicThunder.Effects;
 using MagicThunder.Player;
 using MagicThunder.Score;
 using MagicThunder.UI;
@@ -16,6 +18,9 @@ namespace MagicThunder.Scenes;
 /// </summary>
 public partial class Main : Node
 {
+    /// 深空星空背景（全屏，见 SetupBackground；加载失败回退 project.godot 的深色清屏底）。
+    private const string BackgroundTexturePath = "res://assets/backgrounds/bg_deep_space.jpg";
+
     private PlayerController? _player;
     private Wave.WaveManager? _waves;
     private Enemy.Boss? _boss;
@@ -26,10 +31,17 @@ public partial class Main : Node
     private int _score;
     private int _kills;
     private bool _over;
+    private float _runTime; // 本关战斗时长（秒），战败结算统计用
     private readonly Random _rng = new();
+
+    public override void _Process(double delta)
+    {
+        if (!_over) _runTime += (float)delta; // 战斗计时（暂停/结算后停止）
+    }
 
     public override void _Ready()
     {
+        SetupBackground(); // 星空背景最先装配，保证在所有战场元素下层（ZIndex 最低）
         _hud = new Hud { Name = "Hud" };
         AddChild(_hud);
         _settlement = new Settlement { Name = "Settlement" };
@@ -37,6 +49,18 @@ public partial class Main : Node
 
         SetupStage();
         EventBus.I.World += OnWorldEvent;
+    }
+
+    /// 深空星空背景：Sprite2D 全屏 Keep-Aspect-Covered 拉伸，ZIndex=-10 放最底。
+    /// 加载失败时靠 project.godot 的 default_clear_color（深空色）兜底，不会白屏。
+    private void SetupBackground()
+    {
+        var size = GameManager.I!.PlayfieldSize;
+        var tex = ResourceLoader.Load<Texture2D>(BackgroundTexturePath);
+        if (tex == null || size.X <= 0f || size.Y <= 0f) return;
+        var bg = new Sprite2D { Texture = tex, Centered = false, ZIndex = -10 };
+        bg.Scale = Vector2.One * Mathf.Max(size.X / tex.GetWidth(), size.Y / tex.GetHeight());
+        AddChild(bg);
     }
 
     public override void _ExitTree()
@@ -57,6 +81,14 @@ public partial class Main : Node
             AddChild(enemyBullets);
         }
 
+        // BUG-007：重开一关前清空空中遗留敌弹——上一关的发射器（Enemy/Boss 子节点）已随其
+        // QueueFree 销毁，这些 reparent 到世界层的子弹是"孤儿"，直接销毁不回池（池已随发射器没了）。
+        if (GetNodeOrNull("EnemyBullets") is Node2D bulletsLayer)
+        {
+            foreach (Node c in bulletsLayer.GetChildren())
+                c.QueueFree();
+        }
+
         // 玩家与发射器只建一次，跨关保留升级
         if (_player == null)
         {
@@ -73,6 +105,7 @@ public partial class Main : Node
         _score = 0;
         _kills = 0;
         _over = false;
+        _runTime = 0f;
         GetTree().Paused = false;
         _settlement!.Hide();
 
@@ -100,9 +133,14 @@ public partial class Main : Node
                 break;
 
             case "enemy_killed":
-                if (payload is Enemy.Enemy e) _score += e.KillScore;
                 _kills++;
                 RefreshHud();
+                SfxPlayer.Play("kill"); // 击杀音效
+                if (payload is Enemy.Enemy e)
+                {
+                    _score += e.KillScore;
+                    SpawnKillBurst(e.GlobalPosition); // 击杀爆炸特效（kill_burst 资产）
+                }
                 break;
 
             case "wave_cleared":
@@ -130,7 +168,20 @@ public partial class Main : Node
         AddChild(_boss);
         _boss.Position = center + new Vector2(0, -140);
         _boss.SetTarget(_player);
+        SfxPlayer.Play("boss_intro"); // Boss 出场轰鸣
         RefreshHud();
+    }
+
+    /// 击杀爆炸：kill_burst 黑底素材 + 去黑 shader，在敌人位置放一次放大淡出特效。
+    private void SpawnKillBurst(Vector2 at)
+    {
+        var tex = ResourceLoader.Load<Texture2D>("res://assets/effects/kill_burst.png");
+        var shader = ResourceLoader.Load<Shader>("res://assets/shaders/remove_dark.gdshader");
+        if (tex == null) return;
+        var fx = new SpawnEffect { Texture = tex, Lifetime = 0.35f, StartScale = 0.5f, EndScale = 1.3f };
+        if (shader != null) fx.Material = new ShaderMaterial { Shader = shader };
+        AddChild(fx);
+        fx.Position = at;
     }
 
     private void EndRun(bool victory)
@@ -144,8 +195,11 @@ public partial class Main : Node
         }
         else
         {
+            // 战败 CG（灵魂）：死亡演出（坠落→拉远→黑幕）→ 演出结束由 DeathSequence 调结算
             _pendingChoices = null;
-            _settlement!.ShowDefeat(_score, _kills, SetupStage);
+            var death = new DeathSequence { Name = "DeathSequence" };
+            death.Setup(_player!, _settlement!, _score, _kills, _runTime, SetupStage);
+            AddChild(death);
         }
     }
 
@@ -183,6 +237,7 @@ public partial class Main : Node
         if (_pendingChoices == null || index < 0 || index >= _pendingChoices.Length) return;
         _player!.ApplyUpgrade(_pendingChoices[index].type);
         _pendingChoices = null;
+        SfxPlayer.Play("levelup"); // 升级音效
         SetupStage();
     }
 

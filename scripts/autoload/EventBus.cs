@@ -20,6 +20,9 @@ public partial class EventBus : Node
     private readonly HashSet<string> _once = new();
     private readonly List<string> _log = new();
 
+    // BUG-007：日志上限，防长跑内存无限增长（低频事件，256 足够排障）。
+    private const int MaxLogEntries = 256;
+
     public override void _EnterTree() { I = this; }
     public override void _ExitTree() { if (I == this) I = null!; }
 
@@ -27,6 +30,7 @@ public partial class EventBus : Node
     public void Dispatch(string name, GodotObject? payload = null)
     {
         _log.Add(name);
+        if (_log.Count > MaxLogEntries) _log.RemoveAt(0); // BUG-007：淘汰最旧，日志有界
         World?.Invoke(name, payload);
     }
 

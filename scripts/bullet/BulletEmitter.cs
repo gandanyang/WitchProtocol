@@ -8,7 +8,9 @@ namespace MagicThunder.Bullet;
 /// </summary>
 public partial class BulletEmitter : Node
 {
-    public BulletPool Pool { get; } = new BulletPool(512);
+    // BUG-003：预分配保守初始值 64（不是 512）——Main 开场玩家+敌人两发射器约 128 个 Area2D，
+    // 峰值不足时 BulletPool.Spawn 会惰性扩容（见 BulletPool），避免多敌人/多波次拖慢启动与内存。
+    public BulletPool Pool { get; } = new BulletPool(64);
 
     /// <summary>
     /// P0-1（敌弹世界坐标）：战场弹幕层（Main 装配的 "EnemyBullets" 节点，挂战场原点）。

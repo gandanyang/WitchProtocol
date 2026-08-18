@@ -20,10 +20,6 @@ public partial class Bullet : Area2D
     public System.Action<Bullet>? Recycle;
 
     private const float RadiusPx = 6f;
-    private const uint LayerPlayer = 1;
-    private const uint LayerEnemy = 2;
-    private const uint LayerPlayerBullet = 3;
-    private const uint LayerEnemyBullet = 4;
 
     private const string BulletStarTexture = "res://assets/bullets/bullet_star.png";
     private const string RemoveDarkShader = "res://assets/shaders/remove_dark.gdshader";
@@ -50,9 +46,9 @@ public partial class Bullet : Area2D
         Velocity = velocity;
         Damage = damage;
         IsPlayerBullet = isPlayerBullet;
-        // 碰撞层：玩家弹只打敌人(层2)；敌弹只打玩家 body(层1)。
-        CollisionLayer = isPlayerBullet ? LayerPlayerBullet : LayerEnemyBullet;
-        CollisionMask = isPlayerBullet ? LayerEnemy : LayerPlayer;
+        // 碰撞层（协议见 CollisionLayers）：玩家弹只打敌人；敌弹只打玩家本体。
+        CollisionLayer = isPlayerBullet ? CollisionLayers.PlayerBullet : CollisionLayers.EnemyBullet;
+        CollisionMask = isPlayerBullet ? CollisionLayers.Enemy : CollisionLayers.Player;
         ApplyVisual();
         QueueRedraw();
     }
@@ -63,12 +59,12 @@ public partial class Bullet : Area2D
         {
             if (_sprite == null)
             {
-                var tex = ResourceLoader.Load<Texture2D>(BulletStarTexture, "", ResourceLoader.CacheMode.Ignore);
-                var shader = ResourceLoader.Load<Shader>(RemoveDarkShader, "", ResourceLoader.CacheMode.Ignore);
-                if (tex != null && shader != null)
+                // 默认资源缓存 + 共享材质：所有玩家弹共用一份纹理/材质（不再每发 new + CacheMode.Ignore 重复加载）。
+                var tex = ResourceLoader.Load<Texture2D>(BulletStarTexture);
+                if (tex != null)
                 {
                     _sprite = new Sprite2D { Texture = tex, Scale = Vector2.One * BulletSpriteScale };
-                    _sprite.Material = new ShaderMaterial { Shader = shader };
+                    _sprite.Material = SharedStarMaterial();
                     AddChild(_sprite);
                 }
             }
@@ -78,6 +74,18 @@ public partial class Bullet : Area2D
         {
             _sprite.Visible = false; // 敌弹保持占位圆
         }
+    }
+
+    /// 星辉魔弹去黑底材质（静态共享）：全局一份，降低材质实例数量与 GPU 状态切换。
+    private static ShaderMaterial? _starMat;
+    private static ShaderMaterial? SharedStarMaterial()
+    {
+        if (_starMat == null)
+        {
+            var shader = ResourceLoader.Load<Shader>(RemoveDarkShader);
+            if (shader != null) _starMat = new ShaderMaterial { Shader = shader };
+        }
+        return _starMat;
     }
 
     /// 回收复用前复位到初始态（避免残留旧帧速度/伤害/归属/贴图）。

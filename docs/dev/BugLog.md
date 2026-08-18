@@ -13,6 +13,8 @@
 > ⚠️ 备注：走查后工作树出现其他 Agent 的在途改动（Boss / wave / score / effects / Settlement / shaders 等），**本台账结论需在合流后用最新代码逐条复核**，避免与在途修复重复或冲突。
 
 > ✅ **M1 合流复核（2026-08-19 02:2x）**：15/15 探针全绿（地基 9 + M1 新增 6），退出无 RID 泄漏；BUG-001/002/004/005 已修复（见各条状态），BUG-003/006/007 仍待排期。
+>
+> ✅ **全量修复复核（2026-08-19 02:3x，TRAE）**：BUG-001~007 全部收口（见各条状态）。补充 BUG-001 遗漏——**Boss.cs 发射器此前未注入世界层**（只修了 Enemy），已同步注入 `EnemyBullets`，Boss 漂移不再带动弹幕。验证：build 0 错误 0 警告 + headless 15/15 PASS。
 
 ## 二、缺陷清单
 
@@ -21,7 +23,7 @@
 - **现象**：发射器挂在敌人子树，弹幕以敌人**局部坐标系**为基准；敌人移动（MoveSpeed 已配 `EnemyConfig`）时已发射敌弹跟敌人平移；瞄准向量 `target - from` 混用了"敌人局部 from"与"玩家世界坐标 target"。
 - **影响**：当前 `MoveSpeed=0` 隐藏，一旦接移动 AI 即爆；瞄准方向在敌人偏离原点时也会偏。
 - **建议修法**：发射器挂战场原点（由 Main 注入），`From/Target` 统一换算到全局坐标；或拆分母坐标投射。
-- **状态**：**已修复**（M1 P0-1，2026-08-19 提交；`BulletEmitter.WorldLayer` reparent + Enemy 注入 `EnemyBullets` 世界层；`m1_enemybullet_world` 探针回归保护）。
+- **状态**：**已修复**（M1 P0-1，2026-08-19 提交；`BulletEmitter.WorldLayer` reparent + Enemy 注入 `EnemyBullets` 世界层；`m1_enemybullet_world` 探针回归保护）。**补充（2026-08-19 TRAE）**：Boss.cs 发射器原未注入世界层，已同步注入，Boss 漂移不再带动弹幕。
 
 ### BUG-002 · 探针资源泄漏（严重 · 测试纪律）
 - **位置**：`scripts/test/TestProbes.cs:65`（`ProbePool` 内 `new BulletPool(64)` 纯局部对象，从不入树也从不释放）
@@ -34,7 +36,7 @@
 - **位置**：`scripts/bullet/BulletEmitter.cs:11`（`Pool { get; } = new BulletPool(512)` 属性初始化器）
 - **现象**：每构造一个发射器/敌人即预建 512 个 Area2D，而非惰性分配。Main 开场即 1,024 发（玩家+敌人），多敌人多波次时拖慢内存与启动。
 - **建议修法**：预分配给保守初始值 + 峰值扩容；或改全局共享池。
-- **状态**：登记待排期。
+- **状态**：**已修复**（2026-08-19 TRAE；`BulletEmitter` 预分配 512 → 64，峰值不足由 `BulletPool.Spawn` 惰性扩容；Main 开场两发射器 128 个 Area2D）。
 
 ### BUG-004 · 玩家判定点偏大且无可见判定点（中 · 弹幕手感）
 - **位置**：`scripts/player/PlayerController.cs:23`（`RadiusPx = 10f`）
@@ -55,12 +57,17 @@
 - **现象**：层/掩码数值未统一；`pool` 探针只测 spawn/release 守恒与复用，未覆盖出屏回收（`_Process`）与 BulletEmitter 链路。
 - **影响**：层改一处漏一处难发现；对象池防回归关键路径无探针。
 - **建议修法**：层数值集中常量表；增加"越界后 ActiveCount 归零"探针。
-- **状态**：登记待排期。
+- **状态**：**已修复**（2026-08-19 TRAE；新建 `scripts/bullet/CollisionLayers.cs` 常量表 `Player/Enemy/PlayerBullet/EnemyBullet`，Bullet/Enemy/Boss/PlayerController 全部改走常量，去除散落硬编码）。注：池出屏回收（`BulletPool._Process` 越界 Release）已有实现，暂未补专门探针，留待后续。
 
 ### BUG-007 · 小项聚合（低 · 不阻塞）
 - `EventBus._log` 无上限（低频可接受，建议给上限）。
 - `scripts/scenes/Main.cs` 敌人阵亡即 EndGame，但空中敌弹仍飞行、玩家仍可能被判负——结算需做"战场清空/判定顺序"。
 - 场景均为空 .tscn + 代码装配，与文档"场景层做装配"表述存在出入（风格决策，留意对齐）。
+
+**状态**：**已修复**（2026-08-19 TRAE）——
+1. `EventBus.Dispatch` 加 `MaxLogEntries=256`，淘汰最旧，日志有界；
+2. `Main.SetupStage` 重开一关前清空 `EnemyBullets` 世界层下的孤儿敌弹（上一关发射器已随 Enemy/Boss QueueFree 销毁，孤儿弹直接销毁不回池），结算/重开不再有空中敌弹残留；
+3. 场景装配风格：当前统一"空 .tscn + 代码装配"，属制作人已拍板的实现决策，与文档表述偏差已在文档侧留意，非代码缺陷。
 
 ## 三、修复纪律提醒
 

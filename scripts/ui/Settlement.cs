@@ -56,16 +56,26 @@ public partial class Settlement : CanvasLayer
         AddHint("点击强化，进入下一关（敌人更强，分数更高）");
     }
 
-    /// 失败结算：战绩 + 重新挑战（保留已强化）。
-    public void ShowDefeat(int score, int kills, Action onRetry)
+    /// 失败结算（战败 CG 的收尾）：DEFEATED + 战斗统计 + "她还活着。" + 重新挑战。
+    /// timeSec 战斗时长（秒，格式化为 mm:ss）；weaponLevel 武器等级（当前成长表征）。
+    public void ShowDefeat(int score, int kills, float timeSec, int weaponLevel, Action onRetry)
     {
         _root!.Show();
         ClearBox();
 
-        AddTitle("游戏结束");
-        AddStats($"分数 {score}  |  击杀 {kills}");
+        AddTitle("DEFEATED");
+        int min = (int)(timeSec / 60f);
+        int sec = (int)(timeSec % 60f);
+        AddStats($"战斗时间 {min:00}:{sec:00}  |  击败敌人 {kills}  |  武器等级 Lv{weaponLevel}");
+        AddStats($"获得星之残片 {score}");
         AddSpacer();
-        AddButton("重新挑战（保留已强化）", () => onRetry());
+        var epilogue = new Label { Text = "「她还活着。」" };
+        epilogue.AddThemeFontSizeOverride("font_size", 18);
+        epilogue.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
+        epilogue.Modulate = new Color(1f, 0.85f, 0.6f);
+        _box!.AddChild(epilogue);
+        AddSpacer();
+        AddButton("再次挑战（保留已强化）", () => onRetry());
     }
 
     private void ClearBox()

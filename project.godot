@@ -1,6 +1,10 @@
 ; Engine configuration file.
-; 它最好保持由 Godot 编辑器管理；如需手改请参照 ReturnToStars 的
-; 「四字段铁律」思路：任何结构性改动都先读 docs/AI_GUARDRAIL.md。
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
 
@@ -8,13 +12,11 @@ config_version=5
 
 config/name="Witch Protocol · 魔女协议"
 config/description="魔女协议 — 二次元弹幕 RPG（记忆被剥夺时，还剩什么）"
-config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 run/main_scene="res://scenes/Main.tscn"
-config/icon="res://icon.svg"
-; 使用自定义用户目录名（纯 ASCII，避开项目名里的「·」/空格）
-; 沙箱/日志写 user:// 时权限更稳，SaveSystem 存档路径也变短
 config/use_custom_user_dir=true
 config/custom_user_dir_name="magicThunder"
+config/features=PackedStringArray("4.7", "C#", "Forward Plus")
+config/icon="res://icon.svg"
 
 [autoload]
 
@@ -31,6 +33,10 @@ window/size/window_width_override=1280
 window/size/window_height_override=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
+
+[rendering]
+
+environment/defaults/default_clear_color=Color(0.015, 0.02, 0.05, 1)
 
 [dotnet]
 
@@ -72,8 +78,3 @@ shoot={
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":90,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
 ]
 }
-
-[rendering]
-
-renderer/rendering_method="forward_plus"
-renderer/rendering_method.mobile="mobile"

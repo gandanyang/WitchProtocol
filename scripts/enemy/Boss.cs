@@ -56,10 +56,16 @@ public partial class Boss : Area2D
             AimedInterval = cfg.AimedInterval;
         }
 
-        CollisionLayer = 2; // 供玩家弹 area_entered 检测
+        CollisionLayer = CollisionLayers.Enemy; // 供玩家弹 area_entered 检测
         CollisionMask = 0;
         AddChild(new CollisionShape2D { Shape = new CircleShape2D { Radius = RadiusPx } });
         AddChild(_emitter);
+
+        // P0-1（敌弹世界坐标）：与 Enemy 一致，注入战场弹幕层 "EnemyBullets"（挂战场原点），
+        // Boss 漂移/死亡不带动弹幕；找不到则回退（弹幕挂本节点下）。
+        if (GetTree().Root.FindChild("EnemyBullets", true, false) is Node2D worldLayer)
+            _emitter.WorldLayer = worldLayer;
+
         _hp = MaxHp;
         _baseX = Position.X;
         _ringTimer = 1.0f; // 出场后稍等再开火

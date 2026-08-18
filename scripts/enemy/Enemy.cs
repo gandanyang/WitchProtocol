@@ -41,7 +41,7 @@ public partial class Enemy : Area2D
             ContactDamage = cfg.ContactDamage;
         }
 
-        CollisionLayer = 2; // 供玩家弹 area_entered 检测
+        CollisionLayer = CollisionLayers.Enemy; // 供玩家弹 area_entered 检测
         CollisionMask = 0;  // 自身不主动检测（受击由玩家弹脚本处理）
         AddChild(new CollisionShape2D { Shape = new CircleShape2D { Radius = RadiusPx } });
         AddChild(_emitter);
