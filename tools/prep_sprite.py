@@ -65,7 +65,7 @@ def defringe(rgba):
 
 def main():
     src, dst, size, rotate = SRC, DST, OUT_SIZE, ROTATE
-    mode = "white"  # white=白底抠图（角色/背景主体）；black=黑底抠图（发光特效/深色底）
+    mode = "auto"  # auto=采样四角自动判黑/白底（模型可能不遵守提示词底色，曾把黑底图当白键抠→背景残留）
     if "--src" in sys.argv:
         src = sys.argv[sys.argv.index("--src") + 1]
     if "--out" in sys.argv:
@@ -78,7 +78,14 @@ def main():
         mode = sys.argv[sys.argv.index("--mode") + 1]
 
     img = Image.open(src).convert("RGBA")
-    alpha = make_alpha(img.convert("RGB")) if mode == "white" else make_alpha_black(img.convert("RGB"))
+    rgb = img.convert("RGB")
+    if mode == "auto":
+        # 采样四角平均亮度：<60 判黑底，否则白底（familiar_v1 曾因黑底被白键抠失败）
+        w, h = rgb.size
+        pts = [(3, 3), (w - 4, 3), (3, h - 4), (w - 4, h - 4)]
+        avg = sum(sum(rgb.getpixel(p)) for p in pts) // (4 * 3)
+        mode = "black" if avg < 60 else "white"
+    alpha = make_alpha(rgb) if mode == "white" else make_alpha_black(rgb)
     img.putalpha(alpha)
     if rotate:
         img = img.rotate(rotate, expand=False, resample=Image.BICUBIC)  # 绕中心旋转（尺寸不变）
