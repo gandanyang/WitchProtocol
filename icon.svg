@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- 深色底 + 紫色闪电：呼应「魔法（Witch)」与「雷霆（Thunder）」的项目意象 -->
+  <rect width="128" height="128" rx="24" fill="#1f1147"/>
+  <path d="M 76 12 L 40 70 L 66 70 L 54 116 L 96 50 L 68 50 Z"
+        fill="#c89bff" stroke="#f0e6ff" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="100" cy="24" r="7" fill="#ffffff" opacity="0.9"/>
+  <circle cx="28" cy="104" r="5" fill="#7c5cbf" opacity="0.8"/>
+</svg>

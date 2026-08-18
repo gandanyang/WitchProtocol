@@ -1,0 +1,27 @@
+# ===== Godot =====
+.godot/
+export_presets.cfg
+*.translation
+*.uid.meta
+
+# ===== C# / .NET =====
+bin/
+obj/
+.mono/
+*.user
+*.userprefs
+
+# ===== 本机构建环境（每台机器路径不同，切勿入库） =====
+tools/local.env.*
+
+# ===== AI 工作区（工作日志/会话交接，不入库） =====
+.workbuddy/memory/
+
+# ===== 日志 / 测试产物 =====
+*.log
+tests/reports/
+test-screenshots/
+
+# ===== 系统文件 =====
+Thumbs.db
+.DS_Store

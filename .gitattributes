@@ -1,0 +1,21 @@
+# 统一换行风格为 LF（Godot/.NET 在 Windows/Linux 下行为一致）
+* text=auto
+
+# C# 源文件统一 LF
+*.cs text eol=lf
+*.sln text eol=crlf
+*.csproj text eol=lf
+
+# Godot 文本资源统一 LF（避免跨平台 diff 噪音）
+*.tscn text eol=lf
+*.tres text eol=lf
+*.godot text eol=lf
+*.gdshader text eol=lf
+
+# 二进制资源标记为二进制
+*.png binary
+*.jpg binary
+*.ogg binary
+*.wav binary
+*.mp3 binary
+*.webp binary
