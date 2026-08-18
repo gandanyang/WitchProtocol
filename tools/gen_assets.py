@@ -83,6 +83,111 @@ JOBS = [
                  "fragments and magic circle remnants fading, cinematic wide shot, melancholic epic atmosphere, "
                  "muted violet and silver palette, anime cinematic, high quality illustration, game defeat screen "
                  "background art, no text, no watermark")),
+    # ---- S 级：战斗背景候选（用户要求出几张选；统一星紫调+暗色低对比，保证弹幕可读性）----
+    # prompt-expander-photo 方法论：视觉层级=主景→次景→细节光点；自然语言段落；反套路不堆 cinematic
+    dict(name="bg_cand_nebula", w=1216, h=832, dir="backgrounds",
+         prompt=("a vast deep-space nebula seen from far away, drifting clouds of violet and deep purple gas "
+                 "with scattered silver stars and a faint starry galaxy band across the upper sky, "
+                 "the lower third of the image calm and dark with a few tiny star fragments drifting down, "
+                 "first read is the glowing violet nebula core in the upper center, secondary read the galaxy band, "
+                 "the overall scene is dark and subdued with low contrast so foreground elements stay readable, "
+                 "game stage background art for a vertical bullet hell shooter, muted violet silver palette, "
+                 "no text, no watermark")),
+    dict(name="bg_cand_ruins", w=1216, h=832, dir="backgrounds",
+         prompt=("ancient gothic stone ruins floating in a starry night sky, broken pillars and archways covered in "
+                 "faint glowing violet runes, a wide dark sky filled with small silver stars behind them, "
+                 "a few star shards floating between the ruins, the ruins occupy the lower half of the image and "
+                 "stay dark and low contrast so the player ship remains readable, first read the silhouette of the "
+                 "broken archway, second read the glowing runes, game stage background art for a vertical bullet "
+                 "hell shooter, muted violet silver palette, no text, no watermark")),
+    dict(name="bg_cand_magiccircle", w=1216, h=832, dir="backgrounds",
+         prompt=("a huge faint glowing star magic circle drawn across a dark night sky, its violet lines slowly "
+                 "fading near the edges, a few small floating star fragments and dust specks catching the light, "
+                 "the center of the circle is dark and empty giving space for the player, first read the huge "
+                 "elegant magic circle, second read the drifting star shards, overall dark and subdued low contrast, "
+                 "game stage background art for a vertical bullet hell shooter, muted violet silver palette, "
+                 "no text, no watermark")),
+    dict(name="bg_cand_floatingisles", w=1216, h=832, dir="backgrounds",
+         prompt=("a few small floating islands hovering in a deep violet starry sky, tiny waterfalls of silver "
+                 "starlight falling from their edges, a crescent moon glowing faintly behind the largest island, "
+                 "the islands stay dark silhouettes in the lower part of the image with low contrast, "
+                 "first read the crescent moon and largest island, second read the waterfalls of starlight, "
+                 "overall calm and dark for bullet readability, game stage background art for a vertical bullet "
+                 "hell shooter, muted violet silver palette, no text, no watermark")),
+    dict(name="bg_cand_towers", w=1216, h=832, dir="backgrounds",
+         prompt=("a silhouette of tall gothic spires and a witch castle on a distant floating rock, seen against a "
+                 "deep violet night sky full of small silver stars, a faint glowing aurora band above the towers, "
+                 "the towers stay dark and unlit at the bottom of the image for contrast, first read the spire "
+         "silhouettes against the starfield, second read the faint aurora, overall dark subdued low contrast, "
+         "game stage background art for a vertical bullet hell shooter, muted violet silver palette, "
+         "no text, no watermark")),
+    # ---- S 级：背景候选二批（氛围简约版：更大面积暗色留白，只留少量剪影/微光，弹幕可读性优先）----
+    dict(name="bg_cand2_gradient", w=1216, h=832, dir="backgrounds",
+         prompt=("an extremely minimal dark violet gradient sky, very dark almost black at the bottom fading to a "
+                 "deep violet glow at the top, a handful of tiny silver stars scattered sparsely, one very faint "
+                 "glowing line of a distant star trail, huge empty dark space in the middle of the frame, "
+                 "no buildings no ground no clouds, soft gradient shading, clean flat anime style, "
+                 "minimalist game stage background art for a vertical bullet hell shooter, keep the center of the "
+                 "screen dark and empty for bullets, no text, no watermark")),
+    dict(name="bg_cand2_cloudsea", w=1216, h=832, dir="backgrounds",
+         prompt=("a dark sea of clouds seen from high above at night, the cloud tops barely catching a faint violet "
+                 "moonlight from a small crescent moon in the upper corner, most of the image is deep dark clouds "
+                 "with soft gentle shapes, a few tiny star glints above, calm and quiet, the upper middle of the "
+                 "frame left dark and empty, minimal details, soft gradient shading, clean flat anime style, "
+                 "minimalist game stage background art for a vertical bullet hell shooter, no text, no watermark")),
+    dict(name="bg_cand2_aurora", w=1216, h=832, dir="backgrounds",
+         prompt=("a dark starry sky with a single wide faint aurora ribbon of violet and pale silver light curving "
+                 "across the top, the aurora is soft and translucent, below it the sky is very dark and almost "
+                 "empty with only a few small stars, a thin line of dark mountain silhouette at the very bottom, "
+                 "huge dark negative space in the middle, minimal and quiet, soft gradients, clean flat anime style, "
+                 "minimalist game stage background art for a vertical bullet hell shooter, no text, no watermark")),
+    dict(name="bg_cand2_skydust", w=1216, h=832, dir="backgrounds",
+         prompt=("a very dark violet night sky with a gentle rain of tiny glowing silver star dust falling straight "
+                 "down, each spark small and dim, most of the sky is deep dark empty space, a soft faint glow at the "
+                 "top where the dust seems to come from, minimal details, quiet melancholic mood, "
+                 "soft gradient shading, clean flat anime style, "
+                 "minimalist game stage background art for a vertical bullet hell shooter, no text, no watermark")),
+    dict(name="bg_cand2_silhouette", w=1216, h=832, dir="backgrounds",
+         prompt=("a wide dark silhouette of a distant witch castle and leafless twisted trees on a low hill at the "
+                 "very bottom edge of the frame, above them a huge dark violet starry sky with a large faint glowing "
+                 "violet moon high up, a few wisps of thin cloud, the middle of the sky stays dark and almost empty, "
+                 "the castle silhouette is simple and dark, minimal details, soft gradient shading, clean flat "
+                 "anime style, minimalist game stage background art for a vertical bullet hell shooter, "
+                 "no text, no watermark")),
+    # ---- S 级：背景候选三批（深邃太空版：用户认可 skydust/gradient 方向，加强"太空深邃感"——
+    #     更深黑、远近视差星点、远处星云/银河带、紫色只作微弱光晕点缀）----
+    dict(name="bg_cand3_milkyway", w=1216, h=832, dir="backgrounds",
+         prompt=("a vast deep-space view, mostly very dark near-black with an extremely faint translucent band of the "
+                 "milky way stretching diagonally across the frame, the band is soft pale violet and silver with "
+                 "denser star clusters inside, scattered individual stars at very different distances giving a "
+                 "strong sense of depth, the center of the frame stays dark and almost empty for the player, "
+                 "soft gradient, clean flat anime style, minimalist game stage background art for a vertical "
+                 "bullet hell shooter, no text, no watermark")),
+    dict(name="bg_cand3_deepvoid", w=1216, h=832, dir="backgrounds",
+         prompt=("an extremely dark deep space void, near pure black background with only a handful of small "
+                 "scattered stars at varying sizes and brightness giving a powerful sense of depth, a single very "
+                 "faint distant violet nebula glow on one edge of the frame, no buildings no ground no clouds, "
+                 "the middle of the screen left dark and empty, soft gradient, clean flat anime style, "
+                 "minimalist game stage background art for a vertical bullet hell shooter, no text, no watermark")),
+    dict(name="bg_cand3_farnebula", w=1216, h=832, dir="backgrounds",
+         prompt=("deep dark space with a single very distant glowing violet nebula in the upper background, soft and "
+                 "translucent, surrounded by a quiet cluster of stars, the rest of the sky is mostly near-black "
+                 "with a sparse dusting of tiny stars giving strong depth, a single faint shooting star trail across "
+                 "the middle, the center of the frame stays dark for bullets, soft gradient, clean flat anime style, "
+                 "minimalist game stage background art for a vertical bullet hell shooter, no text, no watermark")),
+    dict(name="bg_cand3_galaxyband", w=1216, h=832, dir="backgrounds",
+         prompt=("a wide dark deep space sky with a soft horizontal galaxy band across the middle, the band is very "
+                 "faint pale violet and silver with a few brighter star clusters inside, the upper and lower parts of "
+                 "the sky are deeper near-black, scattered individual stars at different distances, "
+                 "strong sense of depth, the central area between the band and the lower edge left dark and empty, "
+                 "soft gradient, clean flat anime style, minimalist game stage background art for a vertical bullet "
+                 "hell shooter, no text, no watermark")),
+    dict(name="bg_cand3_silentmoon", w=1216, h=832, dir="backgrounds",
+         prompt=("a quiet deep dark space with a single large faint glowing violet moon high in the upper sky, very "
+                 "soft and atmospheric, a sparse field of small stars at different sizes and brightnesses giving "
+                 "depth, the lower part of the sky fades to near-black, a single very thin star trail far in the "
+                 "background, huge empty dark space in the middle, soft gradient, clean flat anime style, "
+                 "minimalist game stage background art for a vertical bullet hell shooter, no text, no watermark")),
     # ---- S 级下一批：受击/击杀反馈特效 + 升级 UI + 魔法阵（黑底便于去底）----
     dict(name="hit_flash", w=1024, h=1024, dir="effects",
          prompt=("game visual effect sprite, a soft white-violet radial flash burst, expanding star sparks and "
