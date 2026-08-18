@@ -22,9 +22,9 @@ namespace MagicThunder.Player;
 public partial class PlayerController : CharacterBody2D
 {
     private const string DefaultConfigPath = "res://data/PlayerConfig.tres";
-    private const string BattleSpritePath = "res://assets/characters/rika/battlesprite/rika_battlesprite.png";
-    // 玩家立绘是白底素材，去白底 shader（remove_dark 只去黑底，对白底无效）。
-    private const string RemoveWhiteShader = "res://assets/shaders/remove_white.gdshader";
+    // 离线预处理精灵图（tools/prep_sprite.py 产出）：白底大图 → 256px 透明背景高清小图。
+    // 运行时直接显示，免 remove_white shader、免 1024px 大纹理每帧采样（性能优化，用户反馈"太卡"）。
+    private const string BattleSpritePath = "res://assets/characters/rika/battlesprite/rika_battlesprite_ready.png";
 
     /// 武器等级上限（单发→双发→三向），满级后结算不再出现武器强化。
     public const int MaxWeaponLevel = 3;
@@ -47,7 +47,8 @@ public partial class PlayerController : CharacterBody2D
 
     private const float InvincibleTime = 1.5f;
     private const float BoundaryMargin = 24f;
-    private const float BattleSpriteScale = 0.08f; // 1024px 全身图 → ~82px 自机
+    // 256px 预处理精灵 → 显示 ~82px 自机（2x+ 高清密度）
+    private const float BattleSpriteScale = 0.32f;
 
     // ---- 手感（M1 调优）：加速/减速，快起快停，消除"瞬移"僵硬感 ----
     /// 移动加速度（px/s²）：输入方向时向目标速度靠拢的速率。
@@ -109,25 +110,12 @@ public partial class PlayerController : CharacterBody2D
 
     private void TryAttachBattleSprite()
     {
-        // 默认资源缓存（不再 CacheMode.Ignore）：纹理/材质全局共享一份，降低内存与卡顿。
+        // 离线预处理精灵（透明 PNG）：直接加载显示，无 shader 开销（性能优化）。
         var tex = ResourceLoader.Load<Texture2D>(BattleSpritePath);
         if (tex == null) return;
         var sprite = new Sprite2D { Texture = tex, Scale = Vector2.One * BattleSpriteScale };
-        sprite.Material = SharedBattleMaterial(); // 去白底材质静态共享，避免每节点 new
         AddChild(sprite);
         _hasSprite = true;
-    }
-
-    /// 去白底材质（静态共享）：所有玩家实例共用一份 ShaderMaterial，减少材质实例与 GPU 切换。
-    private static ShaderMaterial? _battleMat;
-    private static ShaderMaterial? SharedBattleMaterial()
-    {
-        if (_battleMat == null)
-        {
-            var shader = ResourceLoader.Load<Shader>(RemoveWhiteShader);
-            if (shader != null) _battleMat = new ShaderMaterial { Shader = shader };
-        }
-        return _battleMat;
     }
 
     public override void _Draw()
