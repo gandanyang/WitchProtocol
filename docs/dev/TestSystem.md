@@ -16,7 +16,7 @@
 ## 二、如何运行
 
 ```powershell
-.\tools\run_tests.ps1                  # 5 个默认探针：boot,event,save,pool,pattern
+.\tools\run_tests.ps1                  # 6 个默认探针：boot,event,save,pool,pattern,enemy_config
 .\tools\run_tests.ps1 boot,pool        # 只跑指定探针
 ```
 
@@ -37,6 +37,7 @@ godot --headless --path . res://tests/TestSuite.tscn -- --probes=boot,event,save
 | `save` | 写→存→读往返；版本一致；Reset 备份+归位 | 同上 |
 | `pool` | 对象池 spawn/release 数量守恒 + 复用 | 同上 |
 | `pattern` | aimed/spread/ring/spiral 数学正确 | 同上 |
+| `enemy_config` | Enemy 从 EnemyConfig.tres 读取 HP / 射击间隔 / 子弹速度 | `scripts/test/TestProbes.cs` |
 
 ## 四、编写新探针的范式
 

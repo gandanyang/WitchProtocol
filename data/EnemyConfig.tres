@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="EnemyConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/EnemyConfig.cs" id="1"]
+
+[resource]
+script = ExtResource("1")
+max_hp = 5
+move_speed = 0.0
+shoot_interval = 1.2
+bullet_speed = 180.0
+contact_damage = 1

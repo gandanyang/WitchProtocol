@@ -19,6 +19,7 @@ public static class TestProbes
         hub.RegisterProbe("save", ProbeSave);
         hub.RegisterProbe("pool", ProbePool);
         hub.RegisterProbe("pattern", ProbePattern);
+        hub.RegisterProbe("enemy_config", ProbeEnemyConfig);
     }
 
     /// 启动自检：四个 autoload 单例均已就位，且拿到有效视口。
@@ -92,5 +93,25 @@ public static class TestProbes
         foreach (var v in spiral) if (Mathf.Abs(v.Length() - 80f) > 0.001f) return false;
 
         return true;
+    }
+
+    /// enemy_config：Enemy 从 EnemyConfig.tres 正确读取 HP / 射击间隔 / 子弹速度。
+    /// 让 Enemy 进树触发 _Ready；配置的 max_hp(5) ≠ 代码默认值(3)，具备区分度（未读配置会回退 3 而失败）。
+    private static bool ProbeEnemyConfig()
+    {
+        var res = ResourceLoader.Load("res://data/EnemyConfig.tres", "", ResourceLoader.CacheMode.Ignore);
+        if (res is not Data.EnemyConfig cfg) return false;
+        if (cfg.MaxHp <= 0 || cfg.ShootInterval <= 0f || cfg.BulletSpeed <= 0f) return false;
+
+        var holder = new Node { Name = "ProbeEnemyHolder" };
+        DevTestHub.I.AddChild(holder);
+        var enemy = new Enemy.Enemy();
+        holder.AddChild(enemy); // 触发 _Ready → 从配置读取
+
+        bool ok = enemy.MaxHp == cfg.MaxHp
+                  && enemy.ShootInterval == cfg.ShootInterval
+                  && enemy.BulletSpeed == cfg.BulletSpeed;
+        holder.QueueFree();
+        return ok;
     }
 }

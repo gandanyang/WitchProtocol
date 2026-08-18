@@ -1,6 +1,6 @@
 ﻿# 魔女协议 — headless 跑地基探针（自动化验证）
 # 用法：
-#   .\tools\run_tests.ps1                    # 跑默认 5 个探针
+#   .\tools\run_tests.ps1                    # 跑默认 6 个探针
 #   .\tools\run_tests.ps1 boot,pool          # 只跑指定探针
 # 输出：tests/reports/（不入库）；退出码 0 = 全部通过。
 $ErrorActionPreference = 'Stop'
@@ -24,7 +24,7 @@ Pop-Location
 if ($code -ne 0) { Write-Host '构建失败，已中止。' -ForegroundColor Red; exit $code }
 
 # 2) headless 跑探针
-$probes = 'boot,event,save,pool,pattern'
+$probes = 'boot,event,save,pool,pattern,enemy_config'
 if ($args.Count -gt 0) { $probes = $args[0] }
 Write-Host "== step 2/2 : headless 跑探针 [$probes] =="
 

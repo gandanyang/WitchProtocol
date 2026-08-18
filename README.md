@@ -6,7 +6,8 @@
 
 《魔女协议》是一款二次元弹幕 RPG。玩家扮演失去记忆的魔女，在弹幕战斗中夺回属于自己的记忆与身份。核心循环：**弹幕闪避 → 释放弹幕 → 收集记忆碎片 → 拼回自我**。
 
-> 当前为**地基阶段**：工程骨架、分层架构、核心战斗系统、测试机制与开发纪律文档已就位。尚未进入可玩内容开发。
+> 当前阶段：**M0-2 基础战斗闭环已完成**（玩家移动/开火 → 敌人吐弹 → 命中 → 胜负结算）。
+> 进入 **MVP 垂直切片**：做一条可完整游玩的弹幕战斗体验，而不是继续堆基础设施。
 
 ## 快速开始
 
@@ -43,7 +44,7 @@
 magicThunder/
 ├── project.godot          # 工程配置（autoload 单例 / 输入映射 / 自定义 user 目录）
 ├── magicThunder.csproj    # C# 项目（.NET 8）
-├── scenes/                # 场景文件（Boot 启动场景等）
+├── scenes/                # 场景文件（Main 主场景 / Boot 开发自检）
 ├── data/                  # 数据驱动 .tres 资源（PlayerConfig 等）
 ├── scripts/
 │   ├── autoload/          # 全局单例：GameManager / EventBus / SaveSystem / DevTestHub
@@ -56,6 +57,13 @@ magicThunder/
 ├── tools/                 # 构建 / 运行 / 打开编辑器脚本
 └── docs/                  # 开发纪律文档（见 AGENTS.md 必读列表）
 ```
+
+## 场景用途
+
+| 场景 | 用途 |
+|---|---|
+| `scenes/Main.tscn` | **正式游戏主场景**（`run/main_scene`）：当前最小可玩闭环（玩家 + 敌人 + 弹幕对射 + 结算） |
+| `scenes/Boot.tscn` | **开发 / 自检场景（Dev / Diagnostic Scene）**：地基自检、基础设施诊断、孤立系统测试。**禁止**作为正式游戏入口、承载正式玩法逻辑 |
 
 ## 核心系统
 

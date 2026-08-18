@@ -7,8 +7,9 @@ using MagicThunder.UI;
 namespace MagicThunder.Scenes;
 
 /// <summary>
-/// 主启动场景：地基自检 + 最小可视化占位（一个玩家矩形 + 一条扇面弹）。
-/// 正式玩法从「弹幕沙盒」开始，本场景后续会被真正的战斗场景替换。
+/// 开发 / 自检场景（Dev / Diagnostic Scene）：地基自检 + 最小可视化占位。
+/// 不是正式游戏入口（正式主场景是 scenes/Main.tscn，见 docs/开发约束与架构入口.md）。
+/// 用途：基础设施诊断、孤立系统测试；禁止承载正式玩法逻辑。
 /// </summary>
 public partial class Boot : Node
 {
